@@ -1,37 +1,51 @@
-# For more information about using CMake with Android Studio, read the
-# documentation: https://d.android.com/studio/projects/add-native-code.html.
-# For more examples on how to use CMake, see https://github.com/android/ndk-samples.
-
-# Sets the minimum CMake version required for this project.
 cmake_minimum_required(VERSION 3.22.1)
 
-# Declares the project name. The project name can be accessed via ${ PROJECT_NAME},
-# Since this is the top level CMakeLists.txt, the project name is also accessible
-# with ${CMAKE_PROJECT_NAME} (both CMake variables are in-sync within the top level
-# build script scope).
-project("ojas")
+project(ojas LANGUAGES C CXX)
 
-# Creates and names a library, sets it as either STATIC
-# or SHARED, and provides the relative paths to its source code.
-# You can define multiple libraries, and CMake builds them for you.
-# Gradle automatically packages shared libraries with your APK.
-#
-# In this top level CMakeLists.txt, ${CMAKE_PROJECT_NAME} is used to define
-# the target library name; in the sub-module's CMakeLists.txt, ${PROJECT_NAME}
-# is preferred for the same purpose.
-#
-# In order to load a library into your app from Java/Kotlin, you must call
-# System.loadLibrary() and pass the name of the library defined here;
-# for GameActivity/NativeActivity derived applications, the same library name must be
-# used in the AndroidManifest.xml file.
-add_library(${CMAKE_PROJECT_NAME} SHARED
-        # List C/C++ source files with relative paths to this CMakeLists.txt.
-        native-lib.cpp)
+# C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Specifies libraries CMake should link to your target library. You
-# can link libraries from various origins, such as libraries defined in this
-# build script, prebuilt third-party libraries, or Android system libraries.
-target_link_libraries(${CMAKE_PROJECT_NAME}
-        # List libraries link to the target library
-        android
-        log)
+# Main native library
+add_library(ojas SHARED
+        native-lib.cpp
+        signal_processor.cpp
+        kiss_fft.c
+)
+
+# Base optimization flags (for this target only)
+target_compile_options(ojas PRIVATE
+        -O3
+        -ffast-math
+)
+
+# Enable NEON / architecture-specific flags safely
+if(ANDROID)
+    if(ANDROID_ABI STREQUAL "arm64-v8a")
+        # 64-bit ARM: no -mfloat-abi / -mfpu!
+        target_compile_options(ojas PRIVATE -march=armv8-a)
+        target_compile_definitions(ojas PRIVATE USE_NEON)
+    elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+        # 32-bit ARM: these flags are valid
+        target_compile_options(ojas PRIVATE
+                -mfpu=neon
+                -mfloat-abi=softfp
+        )
+        target_compile_definitions(ojas PRIVATE USE_NEON)
+    endif()
+endif()
+
+# Include directories
+target_include_directories(ojas PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Link libraries
+find_library(log-lib log)
+find_library(android-lib android)
+
+target_link_libraries(ojas
+        ${log-lib}
+        ${android-lib}
+)

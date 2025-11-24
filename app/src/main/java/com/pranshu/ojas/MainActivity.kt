@@ -1,34 +1,46 @@
 package com.pranshu.ojas
-
-import androidx.appcompat.app.AppCompatActivity
+import android.Manifest
 import android.os.Bundle
-import android.widget.TextView
-import com.pranshu.ojas.databinding.ActivityMainBinding
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import  com.pranshu.ojas.ui.MainScreen
+import  com.pranshu.ojas.ui.theme.HemoVisionTheme
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : ComponentActivity() {
 
-    private lateinit var binding: ActivityMainBinding
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            setupUI()
+        } else {
+            // Handle permission denied
+            finish()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
-        // Example of a call to a native method
-        binding.sampleText.text = stringFromJNI()
+        // Request camera permission
+        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
-    /**
-     * A native method that is implemented by the 'ojas' native library,
-     * which is packaged with this application.
-     */
-    external fun stringFromJNI(): String
-
-    companion object {
-        // Used to load the 'ojas' library on application startup.
-        init {
-            System.loadLibrary("ojas")
+    private fun setupUI() {
+        setContent {
+            HemoVisionTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    MainScreen()
+                }
+            }
         }
     }
 }
