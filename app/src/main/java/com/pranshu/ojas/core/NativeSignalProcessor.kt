@@ -12,7 +12,7 @@ class NativeSignalProcessor(
     private var nativeHandle: Long = 0
 
     init {
-        System.loadLibrary("hemovision")
+        System.loadLibrary("ojas")
         nativeHandle = nativeInit(bufferSize, samplingRate)
         Log.d(TAG, "NativeSignalProcessor initialized: handle=$nativeHandle")
     }

@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.compose.compiler) apply false
+    alias(libs.plugins.compose.compiler)
 }
 
 android {
@@ -107,6 +107,10 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+
+    implementation("org.apache.commons:commons-math3:3.6.1")
 
     // Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.32.0")

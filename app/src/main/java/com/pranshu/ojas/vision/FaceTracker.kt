@@ -1,6 +1,6 @@
 package com.pranshu.ojas.vision
 
-
+import com.google.mediapipe.framework.image.BitmapExtractor
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
@@ -54,7 +54,8 @@ class FaceTracker(context: Context) {
                 .setMinFacePresenceConfidence(0.5f)
                 .setMinTrackingConfidence(0.5f)
                 .setResultListener { result, input ->
-                    handleFaceLandmarkerResult(result, input.bitmap)
+                    val bitmap = BitmapExtractor.extract(input) // <--- FIX
+                    handleFaceLandmarkerResult(result, bitmap)
                 }
                 .setErrorListener { error ->
                     Log.e(TAG, "FaceLandmarker error: ${error.message}")
