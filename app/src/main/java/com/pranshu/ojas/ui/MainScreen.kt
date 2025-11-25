@@ -1,6 +1,6 @@
 package com.pranshu.ojas.ui
 
-
+import android.util.Log
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -25,14 +25,19 @@ import com.pranshu.ojas.camera.CameraManager
 import com.pranshu.ojas.viewmodel.HeartRateViewModel
 import com.pranshu.ojas.viewmodel.MeasurementStatus
 
+private const val TAG = "MainScreen"
+
 @Composable
 fun MainScreen() {
+    Log.d(TAG, "MainScreen composing...")
+
     val viewModel: HeartRateViewModel = viewModel()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var cameraManager by remember { mutableStateOf<CameraManager?>(null) }
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
+    var initError by remember { mutableStateOf<String?>(null) }
 
     val heartRate by viewModel.heartRate.collectAsState()
     val signalBuffer by viewModel.signalBuffer.collectAsState()
@@ -41,33 +46,79 @@ fun MainScreen() {
     val faceDetected by viewModel.faceTracker.faceDetected.collectAsState()
     val landmarks by viewModel.faceTracker.landmarks.collectAsState()
 
+    Log.d(TAG, "Current state - HR: $heartRate, Status: $status, Face: $faceDetected")
+
     // Initialize camera on first composition
     LaunchedEffect(Unit) {
-        val preview = PreviewView(context)
-        previewView = preview
-        cameraManager = CameraManager(context, lifecycleOwner, viewModel.faceTracker)
-        cameraManager?.startCamera(preview)
+        Log.d(TAG, "LaunchedEffect: Initializing camera...")
+        try {
+            val preview = PreviewView(context)
+            previewView = preview
+            Log.d(TAG, "PreviewView created")
+
+            cameraManager = CameraManager(context, lifecycleOwner, viewModel.faceTracker)
+            Log.d(TAG, "CameraManager created")
+
+            cameraManager?.startCamera(preview)
+            Log.d(TAG, "Camera started")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize camera", e)
+            initError = e.message
+        }
     }
 
     DisposableEffect(Unit) {
         onDispose {
+            Log.d(TAG, "Disposing camera resources")
             cameraManager?.stopCamera()
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
+        // Show error if initialization failed
+        initError?.let { error ->
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Initialization Error:\n$error",
+                    color = Color.Red,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            return@Box
+        }
+
         // Camera Preview Background
         previewView?.let { preview ->
+            Log.d(TAG, "Rendering camera preview")
             AndroidView(
                 factory = { preview },
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.8f))
             )
+        } ?: run {
+            // Show loading while camera initializes
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = Color(0xFF00FF88)
+                )
+                Text(
+                    text = "Initializing camera...",
+                    color = Color.White,
+                    modifier = Modifier.padding(top = 64.dp)
+                )
+            }
         }
 
         // Face Landmark Overlay
         if (faceDetected && landmarks.isNotEmpty()) {
+            Log.d(TAG, "Drawing ${landmarks.size} landmarks")
             FaceLandmarkOverlay(landmarks = landmarks)
         }
 
@@ -85,7 +136,10 @@ fun MainScreen() {
             heartRate = heartRate,
             status = status,
             confidence = confidence,
-            onReset = { viewModel.reset() },
+            onReset = {
+                Log.d(TAG, "Reset button clicked")
+                viewModel.reset()
+            },
             modifier = Modifier.fillMaxSize()
         )
     }
