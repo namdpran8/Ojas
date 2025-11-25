@@ -60,6 +60,7 @@ android {
     buildFeatures {
         compose = true      // Use Jetpack Compose for UI
         viewBinding = true
+        mlModelBinding = true
     }
 
     composeOptions {
@@ -114,6 +115,7 @@ dependencies {
 
     // Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.32.0")
+    implementation(libs.tensorflow.lite.metadata)
 
     // Testing
     testImplementation("junit:junit:4.13.2")
