@@ -326,8 +326,8 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 ## 👤 Author
 
 **Your Name**
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Email: your.email@example.com
+- GitHub: [@namdpran8](https://github.com/namdpran8)
+- Email: namdeopranshu8@gmail.com
 
 ---
 
@@ -344,7 +344,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 If this project helped you, please consider giving it a star!
 
-[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/hemovision&type=Date)](https://star-history.com/#yourusername/hemovision&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=yourusername/ojas&type=Date)](https://star-history.com/#namdpran8/ojas&Date)
 
 ---
 
