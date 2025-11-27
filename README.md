@@ -6,7 +6,7 @@
 ![API](https://img.shields.io/badge/API-26%2B-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
-HemoVision is a production-grade Android application that measures heart rate from live camera feed using **remote photoplethysmography (rPPG)** technology. The app leverages **Arm Neon SIMD** for signal processing and **NNAPI** for AI-powered signal refinement, achieving real-time performance on mobile devices.
+Ojas is a production-grade Android application that measures heart rate from live camera feed using **remote photoplethysmography (rPPG)** technology. The app leverages **Arm Neon SIMD** for signal processing and **NNAPI** for AI-powered signal refinement, achieving real-time performance on mobile devices.
 
 ---
 
