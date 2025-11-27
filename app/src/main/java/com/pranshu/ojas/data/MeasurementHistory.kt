@@ -1,5 +1,7 @@
 package com.pranshu.ojas.data
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.text.SimpleDateFormat
@@ -21,6 +23,7 @@ class MeasurementHistory {
 
     private val maxHistory = 50 // Keep last 50 measurements
 
+    @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     fun addMeasurement(hr: Float, confidence: Float, quality: String) {
         val measurement = Measurement(
             heartRate = hr,

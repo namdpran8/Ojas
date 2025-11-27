@@ -2,18 +2,25 @@ package com.pranshu.ojas.ui
 
 import android.util.Log
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -48,7 +55,7 @@ fun MainScreen() {
 
     Log.d(TAG, "Current state - HR: $heartRate, Status: $status, Face: $faceDetected")
 
-    // Initialize camera on first composition
+    // Initialize camera
     LaunchedEffect(Unit) {
         Log.d(TAG, "LaunchedEffect: Initializing camera...")
         try {
@@ -75,64 +82,50 @@ fun MainScreen() {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Show error if initialization failed
+        // Error screen
         initError?.let { error ->
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Initialization Error:\n$error",
-                    color = Color.Red,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
+            ErrorScreen(error)
             return@Box
         }
 
-        // Camera Preview Background
+        // Camera preview or loading
         previewView?.let { preview ->
             Log.d(TAG, "Rendering camera preview")
             AndroidView(
                 factory = { preview },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.8f))
+                modifier = Modifier.fillMaxSize()
             )
-        } ?: run {
-            // Show loading while camera initializes
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(
-                    color = Color(0xFF00FF88)
-                )
-                Text(
-                    text = "Initializing camera...",
-                    color = Color.White,
-                    modifier = Modifier.padding(top = 64.dp)
-                )
-            }
-        }
+        } ?: LoadingScreen()
 
-        // Face Landmark Overlay
+        // Face landmarks
         if (faceDetected && landmarks.isNotEmpty()) {
             Log.d(TAG, "Drawing ${landmarks.size} landmarks")
             FaceLandmarkOverlay(landmarks = landmarks)
         }
 
-        // Signal Waveform Graph
-        SignalGraph(
+        // Enhanced signal graph
+        EnhancedSignalGraph(
             signalData = signalBuffer,
+            confidence = confidence,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(150.dp)
+                .height(180.dp)
                 .align(Alignment.Center)
         )
 
-        // HUD Overlay
-        HeartRateHUD(
+        // Signal quality badge
+        if (confidence > 0.3f) {
+            SignalQualityBadge(
+                confidence = confidence,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .offset(y = 80.dp)
+            )
+        }
+
+        // Main HUD
+        EnhancedHeartRateHUD(
             heartRate = heartRate,
             status = status,
             confidence = confidence,
@@ -142,87 +135,228 @@ fun MainScreen() {
             },
             modifier = Modifier.fillMaxSize()
         )
-    }
-}
 
-@Composable
-fun FaceLandmarkOverlay(landmarks: List<Pair<Float, Float>>) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val width = size.width
-        val height = size.height
-
-        // Draw face mesh landmarks in green
-        landmarks.forEach { (x, y) ->
-            val px = x * width
-            val py = y * height
-
-            drawCircle(
-                color = Color.Green.copy(alpha = 0.6f),
-                radius = 3f,
-                center = Offset(px, py)
+        // Animated heartbeat icon
+        if (heartRate > 0 && status == MeasurementStatus.MEASURING) {
+            AnimatedHeartbeat(
+                bpm = heartRate,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+                    .size(56.dp)
             )
         }
     }
 }
 
 @Composable
-fun SignalGraph(signalData: List<Float>, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier.padding(16.dp)) {
-        if (signalData.isEmpty()) return@Canvas
+fun EnhancedSignalGraph(
+    signalData: List<Float>,
+    confidence: Float,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.9f)
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            // Header with quality
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Live Signal",
+                    fontSize = 13.sp,
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontWeight = FontWeight.Medium
+                )
 
-        val width = size.width
-        val height = size.height
+                // Quality indicator
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(getQualityColor(confidence))
+                    )
+                    Text(
+                        text = getQualityText(confidence),
+                        fontSize = 11.sp,
+                        color = getQualityColor(confidence)
+                    )
+                }
+            }
 
-        // Normalize signal to fit canvas
-        val minValue = signalData.minOrNull() ?: 0f
-        val maxValue = signalData.maxOrNull() ?: 1f
-        val range = maxValue - minValue
+            Spacer(modifier = Modifier.height(8.dp))
 
-        if (range <= 0) return@Canvas
+            // Graph canvas
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                if (signalData.isEmpty()) return@Canvas
 
-        val path = Path()
-        val stepX = width / (signalData.size - 1).coerceAtLeast(1)
+                val width = size.width
+                val height = size.height
 
-        signalData.forEachIndexed { index, value ->
-            val x = index * stepX
-            val normalizedValue = (value - minValue) / range
-            val y = height - (normalizedValue * height * 0.8f) - height * 0.1f
+                val minValue = signalData.minOrNull() ?: 0f
+                val maxValue = signalData.maxOrNull() ?: 1f
+                val range = (maxValue - minValue).coerceAtLeast(1f)
 
-            if (index == 0) {
-                path.moveTo(x, y)
-            } else {
-                path.lineTo(x, y)
+                // Grid lines
+                for (i in 1..3) {
+                    val y = height * i / 4
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.1f),
+                        start = Offset(0f, y),
+                        end = Offset(width, y),
+                        strokeWidth = 1f
+                    )
+                }
+
+                // Signal path
+                val path = Path()
+                val stepX = width / (signalData.size - 1).coerceAtLeast(1)
+
+                signalData.forEachIndexed { index, value ->
+                    val x = index * stepX
+                    val normalizedValue = (value - minValue) / range
+                    val y = height - (normalizedValue * height * 0.8f) - height * 0.1f
+
+                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+
+                // Gradient stroke
+                val strokeColor = getQualityColor(confidence)
+                drawPath(
+                    path = path,
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(strokeColor.copy(alpha = 0.5f), strokeColor)
+                    ),
+                    style = Stroke(width = 3f)
+                )
+
+                // Glow effect
+                drawPath(
+                    path = path,
+                    color = strokeColor.copy(alpha = 0.3f),
+                    style = Stroke(width = 8f)
+                )
             }
         }
+    }
+}
 
-        // Draw gradient background
-        drawRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF0A0E27).copy(alpha = 0.7f),
-                    Color(0xFF1A1F3A).copy(alpha = 0.7f)
-                )
+@Composable
+fun SignalQualityBadge(
+    confidence: Float,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            PulsingDot(color = getQualityColor(confidence))
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = getQualityText(confidence),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = getQualityColor(confidence)
             )
-        )
 
-        // Draw signal line with glow effect
-        drawPath(
-            path = path,
-            color = Color(0xFF00FF88),
-            style = Stroke(width = 3f)
-        )
+            Text(
+                text = "${(confidence * 100).toInt()}%",
+                fontSize = 10.sp,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
 
-        // Draw glow
-        drawPath(
-            path = path,
-            color = Color(0xFF00FF88).copy(alpha = 0.3f),
-            style = Stroke(width = 8f)
+@Composable
+fun PulsingDot(color: Color) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale"
+    )
+
+    Box(
+        modifier = Modifier.size(40.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(24.dp * scale)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.3f))
+        )
+        Box(
+            modifier = Modifier
+                .size(16.dp)
+                .clip(CircleShape)
+                .background(color)
         )
     }
 }
 
 @Composable
-fun HeartRateHUD(
+fun AnimatedHeartbeat(bpm: Float, modifier: Modifier = Modifier) {
+    val beatInterval = (60000f / bpm).toLong()
+    var beat by remember { mutableStateOf(false) }
+
+    LaunchedEffect(bpm) {
+        while (true) {
+            beat = true
+            kotlinx.coroutines.delay(100)
+            beat = false
+            kotlinx.coroutines.delay(beatInterval - 100)
+        }
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (beat) 1.4f else 1.0f,
+        animationSpec = tween(100),
+        label = "heartbeat"
+    )
+
+    Icon(
+        imageVector = Icons.Default.Favorite,
+        contentDescription = "Heart",
+        tint = Color(0xFFFF4444),
+        modifier = modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
+    )
+}
+
+@Composable
+fun EnhancedHeartRateHUD(
     heartRate: Float,
     status: MeasurementStatus,
     confidence: Float,
@@ -230,15 +364,16 @@ fun HeartRateHUD(
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
-        // Top Status Bar
+        // Top status bar
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
                 .align(Alignment.TopCenter),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF1A1F3A).copy(alpha = 0.9f)
-            )
+                containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
+            ),
+            shape = RoundedCornerShape(16.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -247,80 +382,218 @@ fun HeartRateHUD(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = getStatusText(status),
-                    color = getStatusColor(status),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StatusIcon(status)
+                    Text(
+                        text = getStatusText(status),
+                        color = getStatusColor(status),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-                // Confidence indicator
-                Text(
-                    text = "${(confidence * 100).toInt()}%",
-                    color = Color.White,
-                    fontSize = 14.sp
+                CircularProgressIndicator(
+                    progress = confidence ,
+                    modifier = Modifier.size(36.dp),
+                    color = Color(0xFF00FF88),
+                    strokeWidth = 3.dp,
+                    trackColor = Color.White.copy(alpha = 0.2f)
                 )
             }
         }
 
-        // Center Heart Rate Display
-        Column(
+        // Center HR display
+        Card(
             modifier = Modifier
                 .align(Alignment.Center)
-                .padding(bottom = 100.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(bottom = 120.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
+            ),
+            shape = RoundedCornerShape(28.dp),
+            elevation = CardDefaults.cardElevation(8.dp)
         ) {
-            Text(
-                text = if (heartRate > 0) "${heartRate.toInt()}" else "--",
-                fontSize = 96.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                style = MaterialTheme.typography.displayLarge
-            )
+            Column(
+                modifier = Modifier.padding(36.dp, 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = if (heartRate > 0) "${heartRate.toInt()}" else "--",
+                    fontSize = 80.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
 
-            Text(
-                text = "BPM",
-                fontSize = 24.sp,
-                color = Color(0xFF00FF88),
-                fontWeight = FontWeight.Medium
-            )
+                Text(
+                    text = "BPM",
+                    fontSize = 18.sp,
+                    color = Color(0xFF00FF88),
+                    fontWeight = FontWeight.Medium
+                )
+
+                if (heartRate > 0) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = getHRCategory(heartRate),
+                        fontSize = 11.sp,
+                        color = getHRCategoryColor(heartRate)
+                    )
+                }
+            }
         }
 
-        // Bottom Controls
-        Button(
+        // Bottom controls
+        FloatingActionButton(
             onClick = onReset,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF00FF88)
-            )
+            containerColor = Color(0xFF00FF88)
         ) {
+            Icon(Icons.Default.Refresh, "Reset", tint = Color.Black)
+        }
+    }
+}
+
+@Composable
+fun StatusIcon(status: MeasurementStatus) {
+    val icon = when (status) {
+        MeasurementStatus.MEASURING -> Icons.Default.CheckCircle
+        MeasurementStatus.NO_FACE -> Icons.Default.Warning
+        MeasurementStatus.TRACKING -> Icons.Default.Search
+        else -> Icons.Default.Info
+    }
+
+    Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = getStatusColor(status),
+        modifier = Modifier.size(20.dp)
+    )
+}
+
+@Composable
+fun ErrorScreen(error: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0A0E27)),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF1A1F3A)
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = Color(0xFFFF4444),
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Error",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = error,
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LoadingScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0A0E27)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(
+                color = Color(0xFF00FF88),
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
             Text(
-                text = "RESET",
-                color = Color.Black,
-                fontWeight = FontWeight.Bold
+                text = "Initializing...",
+                color = Color.White,
+                fontSize = 16.sp
             )
         }
     }
 }
 
-private fun getStatusText(status: MeasurementStatus): String {
-    return when (status) {
-        MeasurementStatus.INITIALIZING -> "Initializing..."
-        MeasurementStatus.NO_FACE -> "No Face Detected"
-        MeasurementStatus.ACQUIRING -> "Acquiring Signal..."
-        MeasurementStatus.TRACKING -> "Tracking..."
-        MeasurementStatus.MEASURING -> "Measuring"
+@Composable
+fun FaceLandmarkOverlay(landmarks: List<Pair<Float, Float>>) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        landmarks.forEach { (x, y) ->
+            drawCircle(
+                color = Color(0xFF00FF88).copy(alpha = 0.6f),
+                radius = 2.5f,
+                center = Offset(x * size.width, y * size.height)
+            )
+        }
     }
 }
 
-private fun getStatusColor(status: MeasurementStatus): Color {
-    return when (status) {
-        MeasurementStatus.INITIALIZING -> Color(0xFFFFAA00)
-        MeasurementStatus.NO_FACE -> Color(0xFFFF4444)
-        MeasurementStatus.ACQUIRING -> Color(0xFFFFAA00)
-        MeasurementStatus.TRACKING -> Color(0xFF00AAFF)
-        MeasurementStatus.MEASURING -> Color(0xFF00FF88)
-    }
+// Helper functions
+private fun getStatusText(status: MeasurementStatus): String = when (status) {
+    MeasurementStatus.INITIALIZING -> "Initializing..."
+    MeasurementStatus.NO_FACE -> "No Face Detected"
+    MeasurementStatus.ACQUIRING -> "Acquiring Signal..."
+    MeasurementStatus.TRACKING -> "Tracking..."
+    MeasurementStatus.MEASURING -> "Measuring"
+}
+
+private fun getStatusColor(status: MeasurementStatus): Color = when (status) {
+    MeasurementStatus.INITIALIZING -> Color(0xFFFFAA00)
+    MeasurementStatus.NO_FACE -> Color(0xFFFF4444)
+    MeasurementStatus.ACQUIRING -> Color(0xFFFFAA00)
+    MeasurementStatus.TRACKING -> Color(0xFF00AAFF)
+    MeasurementStatus.MEASURING -> Color(0xFF00FF88)
+}
+
+private fun getQualityColor(confidence: Float): Color = when {
+    confidence >= 0.8f -> Color(0xFF00FF88)
+    confidence >= 0.6f -> Color(0xFF00DDFF)
+    confidence >= 0.4f -> Color(0xFFFFAA00)
+    else -> Color(0xFFFF4444)
+}
+
+private fun getQualityText(confidence: Float): String = when {
+    confidence >= 0.8f -> "Excellent"
+    confidence >= 0.6f -> "Good"
+    confidence >= 0.4f -> "Fair"
+    else -> "Poor"
+}
+
+private fun getHRCategory(hr: Float): String = when {
+    hr < 60 -> "Resting"
+    hr < 100 -> "Normal"
+    hr < 140 -> "Elevated"
+    else -> "High"
+}
+
+private fun getHRCategoryColor(hr: Float): Color = when {
+    hr < 60 -> Color(0xFF00AAFF)
+    hr < 100 -> Color(0xFF00FF88)
+    hr < 140 -> Color(0xFFFFAA00)
+    else -> Color(0xFFFF4444)
 }
