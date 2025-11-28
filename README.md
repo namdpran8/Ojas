@@ -103,8 +103,8 @@ Ojas is a production-grade Android application that measures heart rate from liv
 
 ### Step 1: Clone Repository
 ```bash
-git clone https://github.com/yourusername/hemovision.git
-cd hemovision
+git clone https://github.com/namdpran8/Ojas
+cd ojas
 ```
 
 ### Step 2: Generate TFLite Model
@@ -211,7 +211,7 @@ FFT finds dominant frequency in 0.75-3.0 Hz range (45-180 BPM) → converts to h
 ## 🗂️ Project Structure
 
 ```
-HemoVision/
+Ojas/
 ├── app/
 │   ├── src/
 │   │   ├── main/
