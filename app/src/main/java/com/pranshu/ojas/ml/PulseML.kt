@@ -116,7 +116,10 @@ class PulseML(context: Context) {
             val refinedHR = outputBuffer?.float ?: rawHR
 
             // Sanity check: Keep HR in valid range
-            return refinedHR.coerceIn(45f, 180f)
+            if (refinedHR <40f){
+                return rawHR
+            }
+            return refinedHR
 
         } catch (e: Exception) {
             Log.e(TAG, "Inference error", e)

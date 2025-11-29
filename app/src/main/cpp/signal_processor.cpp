@@ -36,6 +36,7 @@ void SignalProcessor::addSample(float greenValue, long timestamp) {
 void SignalProcessor::reset() {
     mRawBuffer.clear();
     mTimeBuffer.clear();
+    mPrevHR = 0.0f;
 }
 
 const std::vector<float>& SignalProcessor::getBuffer() const {
@@ -73,12 +74,11 @@ void SignalProcessor::applyWindow(std::vector<float>& data) {
 
 float SignalProcessor::computeHeartRate() {
     int N = mRawBuffer.size();
-    // Need a reasonable amount of data (e.g., ~3-4 seconds)
     if (N < mSamplingRate * 3) {
         return 0.0f;
     }
 
-    // 1. Prepare data
+    // 1. Prepare data (Normalize & Window)
     std::vector<float> processed;
     normalizeBuffer(mRawBuffer, processed);
     applyWindow(processed);
@@ -88,7 +88,6 @@ float SignalProcessor::computeHeartRate() {
         mFftIn[i].r = processed[i];
         mFftIn[i].i = 0.0f;
     }
-    // Zero pad if we haven't filled the buffer yet, though normally we wait
     for (int i = N; i < mBufferSize; ++i) {
         mFftIn[i].r = 0.0f;
         mFftIn[i].i = 0.0f;
@@ -97,19 +96,39 @@ float SignalProcessor::computeHeartRate() {
     // 3. Execute FFT
     kiss_fft(mFftCfg, mFftIn.data(), mFftOut.data());
 
-    // 4. Find Peak Frequency in HR range
-    // Interest range: 45 BPM (0.75 Hz) to 240 BPM (4.0 Hz)
+    // 4. Define Search Range
+    // Default: 45 BPM (0.75 Hz) to 200 BPM (3.33 Hz) - Cap at 200 to avoid high freq noise
     float minFreq = 0.75f;
-    float maxFreq = 4.0f;
+    float maxFreq = 3.33f;
 
+    // SMART SEARCH: If we have a previous HR, restrict search to +/- 15 BPM
+    if (mPrevHR > 0.0f) {
+        float prevFreq = mPrevHR / 60.0f;
+        float window = 15.0f / 60.0f; // 15 BPM window
+        minFreq = std::max(0.75f, prevFreq - window);
+        maxFreq = std::min(3.33f, prevFreq + window);
+    }
+
+    // 5. Find Peak
     float maxMagnitude = 0.0f;
     int peakIndex = -1;
+    float sumMagnitude = 0.0f;
+    int countMagnitude = 0;
 
     for (int i = 1; i < mBufferSize / 2; ++i) {
         float freq = (i * mSamplingRate) / mBufferSize;
 
+        // Compute magnitude for SNR calculation
+        float magnitude = sqrtf(mFftOut[i].r * mFftOut[i].r + mFftOut[i].i * mFftOut[i].i);
+
+        // Only sum magnitude in the valid human heart rate range for average noise level
+        if (freq >= 0.75f && freq <= 3.33f) {
+            sumMagnitude += magnitude;
+            countMagnitude++;
+        }
+
+        // Check for peak within our specific (possibly narrowed) search window
         if (freq >= minFreq && freq <= maxFreq) {
-            float magnitude = sqrtf(mFftOut[i].r * mFftOut[i].r + mFftOut[i].i * mFftOut[i].i);
             if (magnitude > maxMagnitude) {
                 maxMagnitude = magnitude;
                 peakIndex = i;
@@ -117,12 +136,31 @@ float SignalProcessor::computeHeartRate() {
         }
     }
 
-    // 5. Convert peak index to BPM
-    if (peakIndex != -1) {
-        float freq = (peakIndex * mSamplingRate) / mBufferSize;
-        float bpm = freq * 60.0f;
-        return bpm;
+    // 6. Validate Signal Quality (SNR)
+    // If the peak isn't significantly louder than the background noise, ignore it.
+    if (countMagnitude > 0) {
+        float avgMagnitude = sumMagnitude / countMagnitude;
+        // Threshold: Peak must be at least 2x the average noise
+        if (maxMagnitude < avgMagnitude * 2.0f) {
+            // Signal too weak or noisy, keep previous estimate or return 0
+            return mPrevHR > 0 ? mPrevHR : 0.0f;
+        }
     }
 
-    return 0.0f;
+    // 7. Convert to BPM
+    if (peakIndex != -1) {
+        float freq = (peakIndex * mSamplingRate) / mBufferSize;
+        float currentBpm = freq * 60.0f;
+
+        // Smooth update: 30% new value, 70% old value to reduce jitter
+        if (mPrevHR > 0.0f) {
+            mPrevHR = (mPrevHR * 0.7f) + (currentBpm * 0.3f);
+        } else {
+            mPrevHR = currentBpm;
+        }
+
+        return mPrevHR;
+    }
+
+    return mPrevHR; // Return last known good value if no peak found
 }

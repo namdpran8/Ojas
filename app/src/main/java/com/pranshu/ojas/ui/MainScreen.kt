@@ -1,6 +1,7 @@
 package com.pranshu.ojas.ui
 
 import android.util.Log
+import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pranshu.ojas.camera.CameraManager
+
 import com.pranshu.ojas.viewmodel.HeartRateViewModel
 import com.pranshu.ojas.viewmodel.MeasurementStatus
 
@@ -50,8 +52,8 @@ fun MainScreen() {
     val signalBuffer by viewModel.signalBuffer.collectAsState()
     val status by viewModel.status.collectAsState()
     val confidence by viewModel.confidence.collectAsState()
-    val faceDetected by viewModel.faceTracker.faceDetected.collectAsState()
-    val landmarks by viewModel.faceTracker.landmarks.collectAsState()
+    val faceDetected by viewModel.faceTracker?.faceDetected?.collectAsState()
+    val landmarks by viewModel.faceTracker?.landmarks?.collectAsState()
 
     Log.d(TAG, "Current state - HR: $heartRate, Status: $status, Face: $faceDetected")
 
@@ -63,10 +65,11 @@ fun MainScreen() {
             previewView = preview
             Log.d(TAG, "PreviewView created")
 
-            cameraManager = CameraManager(context, lifecycleOwner, viewModel.faceTracker)
+            val manager = CameraManager(context, lifecycleOwner, viewModel.faceTracker)
+            cameraManager = manager
             Log.d(TAG, "CameraManager created")
 
-            cameraManager?.startCamera(preview)
+            manager.startCamera(preview)
             Log.d(TAG, "Camera started")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize camera", e)
@@ -101,6 +104,16 @@ fun MainScreen() {
         if (faceDetected && landmarks.isNotEmpty()) {
             Log.d(TAG, "Drawing ${landmarks.size} landmarks")
             FaceLandmarkOverlay(landmarks = landmarks)
+        }
+
+        // Camera Controls (Top Left)
+        cameraManager?.let { manager ->
+            CameraControls(
+                cameraManager = manager,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+            )
         }
 
         // Enhanced signal graph
@@ -145,6 +158,88 @@ fun MainScreen() {
                     .padding(24.dp)
                     .size(56.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun CameraControls(
+    cameraManager: CameraManager,
+    modifier: Modifier = Modifier
+) {
+    val lensFacing by cameraManager.currentLensFacing.collectAsState()
+    val isFlashOn by cameraManager.isFlashOn.collectAsState()
+    val hasFlash by cameraManager.hasFlash.collectAsState()
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Camera Switch Button
+        FloatingActionButton(
+            onClick = { cameraManager.switchCamera() },
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f),
+            contentColor = Color.White,
+            modifier = Modifier.size(56.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Cameraswitch,
+                contentDescription = "Switch Camera",
+                tint = Color(0xFF00FF88),
+                modifier = Modifier.size(28.dp)
+            )
+        }
+
+        // Flash Button (only show if available)
+        if (hasFlash) {
+            FloatingActionButton(
+                onClick = { cameraManager.toggleFlash() },
+                containerColor = if (isFlashOn) {
+                    Color(0xFFFFAA00).copy(alpha = 0.95f)
+                } else {
+                    Color(0xFF1A1F3A).copy(alpha = 0.95f)
+                },
+                contentColor = Color.White,
+                modifier = Modifier.size(56.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                    contentDescription = if (isFlashOn) "Flash On" else "Flash Off",
+                    tint = if (isFlashOn) Color.White else Color(0xFF00FF88),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+        }
+
+        // Camera indicator badge
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
+            ),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(8.dp, 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = if (lensFacing == CameraSelector.LENS_FACING_FRONT) {
+                        Icons.Default.CameraFront
+                    } else {
+                        Icons.Default.CameraRear
+                    },
+                    contentDescription = null,
+                    tint = Color(0xFF00FF88),
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = if (lensFacing == CameraSelector.LENS_FACING_FRONT) "Front" else "Back",
+                    fontSize = 11.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
     }
 }
@@ -396,7 +491,7 @@ fun EnhancedHeartRateHUD(
                 }
 
                 CircularProgressIndicator(
-                    progress = confidence ,
+                    progress = confidence,
                     modifier = Modifier.size(36.dp),
                     color = Color(0xFF00FF88),
                     strokeWidth = 3.dp,

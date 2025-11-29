@@ -11,6 +11,7 @@ public:
     SignalProcessor(int bufferSize, float samplingRate);
     ~SignalProcessor();
 
+
     void addSample(float greenValue, long timestamp);
     float computeHeartRate();
     const std::vector<float>& getBuffer() const;
@@ -18,6 +19,8 @@ public:
     void reset();
 
 private:
+    float mPrevHR = 0.0f;
+
     int mBufferSize;
     float mSamplingRate;
     std::vector<float> mRawBuffer;

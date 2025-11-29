@@ -10,16 +10,18 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import com.pranshu.ojas.vision.FaceTracker
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
- * Manages CameraX setup and frame streaming
+ * Manages CameraX setup and frame streaming with camera switching and flash support
  */
 class CameraManager(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
-    private val faceTracker: FaceTracker
+    private val faceTracker: FaceTracker?
 ) {
 
     private var cameraProvider: ProcessCameraProvider? = null
@@ -31,10 +33,23 @@ class CameraManager(
     private var frameCount = 0
     private var lastFpsTime = System.currentTimeMillis()
 
+    // Camera state
+    private val _currentLensFacing = MutableStateFlow(CameraSelector.LENS_FACING_FRONT)
+    val currentLensFacing: StateFlow<Int> = _currentLensFacing
+
+    private val _isFlashOn = MutableStateFlow(false)
+    val isFlashOn: StateFlow<Boolean> = _isFlashOn
+
+    private val _hasFlash = MutableStateFlow(false)
+    val hasFlash: StateFlow<Boolean> = _hasFlash
+
+    private var currentPreviewView: PreviewView? = null
+
     /**
-     * Start camera with front-facing lens
+     * Start camera with front-facing lens (default)
      */
     fun startCamera(previewView: PreviewView) {
+        currentPreviewView = previewView
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
@@ -53,9 +68,9 @@ class CameraManager(
         // Unbind all use cases before rebinding
         cameraProvider.unbindAll()
 
-        // Select front camera
+        // Select camera based on current lens facing
         val cameraSelector = CameraSelector.Builder()
-            .requireLensFacing(CameraSelector.LENS_FACING_FRONT)
+            .requireLensFacing(_currentLensFacing.value)
             .build()
 
         // Preview use case
@@ -87,7 +102,16 @@ class CameraManager(
                 imageAnalysis
             )
 
-            Log.d(TAG, "Camera bound successfully")
+            // Check if flash is available
+            val hasFlashUnit = camera?.cameraInfo?.hasFlashUnit() ?: false
+            _hasFlash.value = hasFlashUnit
+
+            // Apply flash state if available
+            if (hasFlashUnit && _isFlashOn.value) {
+                camera?.cameraControl?.enableTorch(true)
+            }
+
+            Log.d(TAG, "Camera bound successfully. Lens: ${getLensFacingName()}, Flash available: $hasFlashUnit")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to bind camera use cases", e)
         }
@@ -134,7 +158,77 @@ class CameraManager(
         return Bitmap.createBitmap(bitmap, 0, 0, width, height, matrix, true)
     }
 
+    /**
+     * Switch between front and back camera
+     */
+    fun switchCamera() {
+        _currentLensFacing.value = if (_currentLensFacing.value == CameraSelector.LENS_FACING_FRONT) {
+            CameraSelector.LENS_FACING_BACK
+        } else {
+            CameraSelector.LENS_FACING_FRONT
+        }
+
+        // Rebind camera with new lens
+        currentPreviewView?.let { bindCameraUseCases(it) }
+
+        Log.d(TAG, "Camera switched to: ${getLensFacingName()}")
+    }
+
+    /**
+     * Toggle flash on/off
+     */
+    fun toggleFlash() {
+        val camera = camera ?: return
+
+        if (!_hasFlash.value) {
+            Log.w(TAG, "Flash not available on this camera")
+            return
+        }
+
+        val newFlashState = !_isFlashOn.value
+
+        try {
+            camera.cameraControl.enableTorch(newFlashState)
+            _isFlashOn.value = newFlashState
+            Log.d(TAG, "Flash ${if (newFlashState) "enabled" else "disabled"}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to toggle flash", e)
+        }
+    }
+
+    /**
+     * Set flash state explicitly
+     */
+    fun setFlash(enabled: Boolean) {
+        val camera = camera ?: return
+
+        if (!_hasFlash.value) {
+            Log.w(TAG, "Flash not available on this camera")
+            return
+        }
+
+        try {
+            camera.cameraControl.enableTorch(enabled)
+            _isFlashOn.value = enabled
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set flash", e)
+        }
+    }
+
+    private fun getLensFacingName(): String {
+        return if (_currentLensFacing.value == CameraSelector.LENS_FACING_FRONT) {
+            "Front"
+        } else {
+            "Back"
+        }
+    }
+
     fun stopCamera() {
+        // Turn off flash before stopping
+        if (_isFlashOn.value) {
+            camera?.cameraControl?.enableTorch(false)
+        }
+
         cameraProvider?.unbindAll()
         cameraExecutor.shutdown()
     }
