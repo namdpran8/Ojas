@@ -33,6 +33,7 @@ import com.pranshu.ojas.camera.CameraManager
 
 import com.pranshu.ojas.viewmodel.HeartRateViewModel
 import com.pranshu.ojas.viewmodel.MeasurementStatus
+import com.pranshu.ojas.viewmodel.MeasurementStatus.*
 
 private const val TAG = "MainScreen"
 
@@ -52,8 +53,8 @@ fun MainScreen() {
     val signalBuffer by viewModel.signalBuffer.collectAsState()
     val status by viewModel.status.collectAsState()
     val confidence by viewModel.confidence.collectAsState()
-    val faceDetected by viewModel.faceTracker?.faceDetected?.collectAsState()
-    val landmarks by viewModel.faceTracker?.landmarks?.collectAsState()
+    val faceDetected by viewModel.faceDetected.collectAsState()
+    val landmarks by viewModel.landmarks.collectAsState()
 
     Log.d(TAG, "Current state - HR: $heartRate, Status: $status, Face: $faceDetected")
 
@@ -650,19 +651,21 @@ fun FaceLandmarkOverlay(landmarks: List<Pair<Float, Float>>) {
 
 // Helper functions
 private fun getStatusText(status: MeasurementStatus): String = when (status) {
-    MeasurementStatus.INITIALIZING -> "Initializing..."
-    MeasurementStatus.NO_FACE -> "No Face Detected"
-    MeasurementStatus.ACQUIRING -> "Acquiring Signal..."
-    MeasurementStatus.TRACKING -> "Tracking..."
-    MeasurementStatus.MEASURING -> "Measuring"
+    INITIALIZING -> "Initializing..."
+    NO_FACE -> "No Face Detected"
+    ACQUIRING -> "Acquiring Signal..."
+    TRACKING -> "Tracking..."
+    MEASURING -> "Measuring"
+    COMPLETED -> TODO()
 }
 
 private fun getStatusColor(status: MeasurementStatus): Color = when (status) {
-    MeasurementStatus.INITIALIZING -> Color(0xFFFFAA00)
-    MeasurementStatus.NO_FACE -> Color(0xFFFF4444)
-    MeasurementStatus.ACQUIRING -> Color(0xFFFFAA00)
-    MeasurementStatus.TRACKING -> Color(0xFF00AAFF)
-    MeasurementStatus.MEASURING -> Color(0xFF00FF88)
+    INITIALIZING -> Color(0xFFFFAA00)
+    NO_FACE -> Color(0xFFFF4444)
+    ACQUIRING -> Color(0xFFFFAA00)
+    TRACKING -> Color(0xFF00AAFF)
+    MEASURING -> Color(0xFF00FF88)
+    COMPLETED -> TODO()
 }
 
 private fun getQualityColor(confidence: Float): Color = when {

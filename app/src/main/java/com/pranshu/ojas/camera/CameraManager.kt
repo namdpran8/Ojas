@@ -124,7 +124,7 @@ class CameraManager(
 
             // Process with face tracker
             val timestamp = System.currentTimeMillis()
-            faceTracker.processFrame(bitmap, timestamp)
+            faceTracker?.processFrame(bitmap, timestamp)
 
             // FPS tracking
             frameCount++

@@ -61,6 +61,13 @@ class HeartRateViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentHrEstimate = 0f
     private val alpha = 0.15f // Smoothing factor
 
+    private val _faceDetected = MutableStateFlow(false)
+    val faceDetected: StateFlow<Boolean> = _faceDetected.asStateFlow()
+
+    private val _landmarks = MutableStateFlow<List<Pair<Float, Float>>>(emptyList())
+    val landmarks: StateFlow<List<Pair<Float, Float>>> = _landmarks.asStateFlow()
+
+
     init {
         // Initialize heavy AI models in background to prevent UI freeze
         viewModelScope.launch(Dispatchers.Default) {
@@ -77,6 +84,13 @@ class HeartRateViewModel(application: Application) : AndroidViewModel(applicatio
     @RequiresApi(Build.VERSION_CODES.VANILLA_ICE_CREAM)
     private fun startProcessing() {
         val tracker = faceTracker ?: return
+
+        viewModelScope.launch {
+            tracker.faceDetected.collect { _faceDetected.value = it }
+        }
+        viewModelScope.launch {
+            tracker.landmarks.collect { _landmarks.value = it }
+        }
 
         // 1. Collect Green Signal from Face
         processingJob = viewModelScope.launch {
