@@ -1,6 +1,7 @@
 package com.pranshu.ojas.ui
 
 import android.util.Log
+import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -24,9 +25,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pranshu.ojas.camera.CameraManager
 import com.pranshu.ojas.viewmodel.HeartRateViewModel
@@ -50,10 +53,9 @@ fun MainScreen() {
     val signalBuffer by viewModel.signalBuffer.collectAsState()
     val status by viewModel.status.collectAsState()
     val confidence by viewModel.confidence.collectAsState()
-    val faceDetected by viewModel.faceTracker.faceDetected.collectAsState()
-    val landmarks by viewModel.faceTracker.landmarks.collectAsState()
-
-    Log.d(TAG, "Current state - HR: $heartRate, Status: $status, Face: $faceDetected")
+    val faceDetected by viewModel.faceDetected.collectAsState()
+    val landmarks by viewModel.landmarks.collectAsState()
+    val stressLevel by viewModel.stressLevel.collectAsState()
 
     // Initialize camera
     LaunchedEffect(Unit) {
@@ -63,10 +65,11 @@ fun MainScreen() {
             previewView = preview
             Log.d(TAG, "PreviewView created")
 
-            cameraManager = CameraManager(context, lifecycleOwner, viewModel.faceTracker)
+            val manager = CameraManager(context, lifecycleOwner, viewModel.faceTracker)
+            cameraManager = manager
             Log.d(TAG, "CameraManager created")
 
-            cameraManager?.startCamera(preview)
+            manager.startCamera(preview)
             Log.d(TAG, "Camera started")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize camera", e)
@@ -81,76 +84,343 @@ fun MainScreen() {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Error screen
-        initError?.let { error ->
-            ErrorScreen(error)
-            return@Box
-        }
+    // Error or Loading state
+    if (initError != null) {
+        ErrorScreen(initError!!)
+        return
+    }
 
-        // Camera preview or loading
+    if (previewView == null) {
+        LoadingScreen()
+        return
+    }
+
+    // Main Layout - Vertical Stack matching reference
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Background: Camera preview
         previewView?.let { preview ->
-            Log.d(TAG, "Rendering camera preview")
             AndroidView(
                 factory = { preview },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().zIndex(0f)
             )
-        } ?: LoadingScreen()
-
-        // Face landmarks
-        if (faceDetected && landmarks.isNotEmpty()) {
-            Log.d(TAG, "Drawing ${landmarks.size} landmarks")
-            FaceLandmarkOverlay(landmarks = landmarks)
         }
 
-        // Enhanced signal graph
-        EnhancedSignalGraph(
-            signalData = signalBuffer,
-            confidence = confidence,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(180.dp)
-                .align(Alignment.Center)
-        )
+        // Face landmarks overlay
+        if (faceDetected && landmarks.isNotEmpty()) {
+            FaceLandmarkOverlay(
+                landmarks = landmarks,
+                modifier = Modifier.fillMaxSize().zIndex(1f)
+            )
+        }
 
-        // Signal quality badge
-        if (confidence > 0.3f) {
-            SignalQualityBadge(
+        // Camera controls (floating top-left)
+        cameraManager?.let { manager ->
+            CameraControls(
+                cameraManager = manager,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .zIndex(10f)
+            )
+        }
+
+        // Main Content - Vertical sections
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+                .zIndex(5f),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // TOP SECTION: Camera Preview Area (with status overlay)
+            CameraPreviewSection(
+                status = status,
                 confidence = confidence,
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .offset(y = 80.dp)
+                    .fillMaxWidth()
+                    .weight(1.5f)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // MIDDLE SECTION: Stress and Other Info
+            StressInfoSection(
+                stressLevel = stressLevel,
+                status = status,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.6f)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // BOTTOM ROW: Some Useful Info + BPM Count
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.5f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Left: Useful Info Card
+                UsefulInfoSection(
+                    heartRate = heartRate,
+                    confidence = confidence,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                )
+
+                // Right: BPM Count
+                BPMCountSection(
+                    heartRate = heartRate,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // BOTTOM SECTION: Heart Beat Graph
+            HeartBeatGraphSection(
+                signalData = signalBuffer,
+                confidence = confidence,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
             )
         }
 
-        // Main HUD
-        EnhancedHeartRateHUD(
-            heartRate = heartRate,
-            status = status,
-            confidence = confidence,
-            onReset = {
+        // Floating reset button (bottom center)
+        FloatingActionButton(
+            onClick = {
                 Log.d(TAG, "Reset button clicked")
                 viewModel.reset()
             },
-            modifier = Modifier.fillMaxSize()
-        )
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp)
+                .zIndex(10f),
+            containerColor = Color(0xFF00FF88),
+            contentColor = Color.Black
+        ) {
+            Icon(Icons.Default.Refresh, "Reset")
+        }
+    }
+}
 
-        // Animated heartbeat icon
-        if (heartRate > 0 && status == MeasurementStatus.MEASURING) {
-            AnimatedHeartbeat(
-                bpm = heartRate,
+// ========== SECTION COMPOSABLES ==========
+
+@Composable
+fun CameraPreviewSection(
+    status: MeasurementStatus,
+    confidence: Float,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF1A1F3A).copy(alpha = 0.3f))
+        ) {
+            Column(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(24.dp)
-                    .size(56.dp)
-            )
+                    .align(Alignment.Center)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "camera preview",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Status indicator
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    StatusIcon(status)
+                    Text(
+                        text = getStatusText(status),
+                        color = getStatusColor(status),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Confidence progress
+                LinearProgressIndicator(
+                    progress = { confidence },
+                    modifier = Modifier
+                        .width(200.dp)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = Color(0xFF00FF88),
+                    trackColor = Color.White.copy(alpha = 0.2f)
+                )
+            }
         }
     }
 }
 
 @Composable
-fun EnhancedSignalGraph(
+fun StressInfoSection(
+    stressLevel: String,
+    status: MeasurementStatus,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "stress and other info",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Show stress info if measuring
+            if (status == MeasurementStatus.MEASURING) {
+                Text(
+                    text = stressLevel,
+                    fontSize = 14.sp,
+                    color = Color(0xFF00FF88),
+                    lineHeight = 20.sp
+                )
+            } else {
+                Text(
+                    text = "Place your face in frame to begin measurement",
+                    fontSize = 13.sp,
+                    color = Color.White.copy(alpha = 0.5f),
+                    lineHeight = 18.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun UsefulInfoSection(
+    heartRate: Float,
+    confidence: Float,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "some useful info",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+
+            Column {
+                // HR Category
+                if (heartRate > 0) {
+                    Text(
+                        text = "Status: ${getHRCategory(heartRate)}",
+                        fontSize = 12.sp,
+                        color = getHRCategoryColor(heartRate)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                // Quality
+                Text(
+                    text = "Quality: ${getQualityText(confidence)}",
+                    fontSize = 12.sp,
+                    color = getQualityColor(confidence)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun BPMCountSection(
+    heartRate: Float,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "bpm count",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+
+            // Large BPM number
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = if (heartRate > 0) "${heartRate.toInt()}" else "--",
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF00FF88)
+                )
+                Text(
+                    text = "BPM",
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HeartBeatGraphSection(
     signalData: List<Float>,
     confidence: Float,
     modifier: Modifier = Modifier
@@ -158,52 +428,36 @@ fun EnhancedSignalGraph(
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.9f)
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Header with quality
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Live Signal",
-                    fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontWeight = FontWeight.Medium
-                )
-
-                // Quality indicator
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(getQualityColor(confidence))
-                    )
-                    Text(
-                        text = getQualityText(confidence),
-                        fontSize = 11.sp,
-                        color = getQualityColor(confidence)
-                    )
-                }
-            }
+            Text(
+                text = "heart beat graph",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.7f)
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
             // Graph canvas
             Canvas(modifier = Modifier.fillMaxSize()) {
-                if (signalData.isEmpty()) return@Canvas
+                if (signalData.isEmpty()) {
+                    // Empty state
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.2f),
+                        start = Offset(0f, size.height / 2),
+                        end = Offset(size.width, size.height / 2),
+                        strokeWidth = 2f
+                    )
+                    return@Canvas
+                }
 
                 val width = size.width
                 val height = size.height
@@ -256,204 +510,55 @@ fun EnhancedSignalGraph(
     }
 }
 
+// ========== HELPER COMPOSABLES ==========
+
 @Composable
-fun SignalQualityBadge(
-    confidence: Float,
+fun CameraControls(
+    cameraManager: CameraManager,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    val lensFacing by cameraManager.currentLensFacing.collectAsState()
+    val isFlashOn by cameraManager.isFlashOn.collectAsState()
+    val hasFlash by cameraManager.hasFlash.collectAsState()
+
+    Column(
         modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
-        ),
-        shape = RoundedCornerShape(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            PulsingDot(color = getQualityColor(confidence))
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = getQualityText(confidence),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = getQualityColor(confidence)
-            )
-
-            Text(
-                text = "${(confidence * 100).toInt()}%",
-                fontSize = 10.sp,
-                color = Color.White.copy(alpha = 0.7f)
-            )
-        }
-    }
-}
-
-@Composable
-fun PulsingDot(color: Color) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val scale by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 1.3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "scale"
-    )
-
-    Box(
-        modifier = Modifier.size(40.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(24.dp * scale)
-                .clip(CircleShape)
-                .background(color.copy(alpha = 0.3f))
-        )
-        Box(
-            modifier = Modifier
-                .size(16.dp)
-                .clip(CircleShape)
-                .background(color)
-        )
-    }
-}
-
-@Composable
-fun AnimatedHeartbeat(bpm: Float, modifier: Modifier = Modifier) {
-    val beatInterval = (60000f / bpm).toLong()
-    var beat by remember { mutableStateOf(false) }
-
-    LaunchedEffect(bpm) {
-        while (true) {
-            beat = true
-            kotlinx.coroutines.delay(100)
-            beat = false
-            kotlinx.coroutines.delay(beatInterval - 100)
-        }
-    }
-
-    val scale by animateFloatAsState(
-        targetValue = if (beat) 1.4f else 1.0f,
-        animationSpec = tween(100),
-        label = "heartbeat"
-    )
-
-    Icon(
-        imageVector = Icons.Default.Favorite,
-        contentDescription = "Heart",
-        tint = Color(0xFFFF4444),
-        modifier = modifier.graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-    )
-}
-
-@Composable
-fun EnhancedHeartRateHUD(
-    heartRate: Float,
-    status: MeasurementStatus,
-    confidence: Float,
-    onReset: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(modifier = modifier) {
-        // Top status bar
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .align(Alignment.TopCenter),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
-            ),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    StatusIcon(status)
-                    Text(
-                        text = getStatusText(status),
-                        color = getStatusColor(status),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-
-                CircularProgressIndicator(
-                    progress = confidence ,
-                    modifier = Modifier.size(36.dp),
-                    color = Color(0xFF00FF88),
-                    strokeWidth = 3.dp,
-                    trackColor = Color.White.copy(alpha = 0.2f)
-                )
-            }
-        }
-
-        // Center HR display
-        Card(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(bottom = 120.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
-            ),
-            shape = RoundedCornerShape(28.dp),
-            elevation = CardDefaults.cardElevation(8.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(36.dp, 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = if (heartRate > 0) "${heartRate.toInt()}" else "--",
-                    fontSize = 80.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-
-                Text(
-                    text = "BPM",
-                    fontSize = 18.sp,
-                    color = Color(0xFF00FF88),
-                    fontWeight = FontWeight.Medium
-                )
-
-                if (heartRate > 0) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = getHRCategory(heartRate),
-                        fontSize = 11.sp,
-                        color = getHRCategoryColor(heartRate)
-                    )
-                }
-            }
-        }
-
-        // Bottom controls
+        // Camera Switch Button
         FloatingActionButton(
-            onClick = onReset,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp),
-            containerColor = Color(0xFF00FF88)
+            onClick = { cameraManager.switchCamera() },
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f),
+            contentColor = Color.White,
+            modifier = Modifier.size(48.dp)
         ) {
-            Icon(Icons.Default.Refresh, "Reset", tint = Color.Black)
+            Icon(
+                imageVector = Icons.Default.Cameraswitch,
+                contentDescription = "Switch Camera",
+                tint = Color(0xFF00FF88),
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        // Flash Button
+        if (hasFlash) {
+            FloatingActionButton(
+                onClick = { cameraManager.toggleFlash() },
+                containerColor = if (isFlashOn) {
+                    Color(0xFFFFAA00).copy(alpha = 0.95f)
+                } else {
+                    Color(0xFF1A1F3A).copy(alpha = 0.95f)
+                },
+                contentColor = Color.White,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                    contentDescription = if (isFlashOn) "Flash On" else "Flash Off",
+                    tint = if (isFlashOn) Color.White else Color(0xFF00FF88),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
@@ -473,6 +578,22 @@ fun StatusIcon(status: MeasurementStatus) {
         tint = getStatusColor(status),
         modifier = Modifier.size(20.dp)
     )
+}
+
+@Composable
+fun FaceLandmarkOverlay(
+    landmarks: List<Pair<Float, Float>>,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        landmarks.forEach { (x, y) ->
+            drawCircle(
+                color = Color(0xFF00FF88).copy(alpha = 0.6f),
+                radius = 2.5f,
+                center = Offset(x * size.width, y * size.height)
+            )
+        }
+    }
 }
 
 @Composable
@@ -510,7 +631,8 @@ fun ErrorScreen(error: String) {
                 Text(
                     text = error,
                     fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.7f)
+                    color = Color.White.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
                 )
             }
         }
@@ -540,20 +662,8 @@ fun LoadingScreen() {
     }
 }
 
-@Composable
-fun FaceLandmarkOverlay(landmarks: List<Pair<Float, Float>>) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        landmarks.forEach { (x, y) ->
-            drawCircle(
-                color = Color(0xFF00FF88).copy(alpha = 0.6f),
-                radius = 2.5f,
-                center = Offset(x * size.width, y * size.height)
-            )
-        }
-    }
-}
+// ========== HELPER FUNCTIONS ==========
 
-// Helper functions
 private fun getStatusText(status: MeasurementStatus): String = when (status) {
     MeasurementStatus.INITIALIZING -> "Initializing..."
     MeasurementStatus.NO_FACE -> "No Face Detected"

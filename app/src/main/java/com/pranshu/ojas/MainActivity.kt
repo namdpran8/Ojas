@@ -16,7 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import com.pranshu.ojas.ui.theme.MainScreen
+import com.pranshu.ojas.ui.MainScreen
 
 import com.pranshu.ojas.ui.theme.OjasTheme
 
