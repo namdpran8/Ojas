@@ -12,6 +12,8 @@ public:
     ~SignalProcessor();
 
 
+    float computeRespirationRate();
+
     void addSample(float greenValue, long timestamp);
     float computeHeartRate();
     const std::vector<float>& getBuffer() const;

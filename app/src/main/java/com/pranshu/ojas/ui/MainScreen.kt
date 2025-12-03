@@ -1,6 +1,7 @@
 package com.pranshu.ojas.ui
 
 import android.util.Log
+import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -57,8 +58,12 @@ fun MainScreen() {
     val stressLevel by viewModel.stressLevel.collectAsState()
     val qualityMsg by viewModel.signalQualityMsg.collectAsState()
 
+    // --- Camera Lens State (FIX for Back Camera Grid) ---
+    // Default to Front if manager isn't ready
+    val currentLensFacing by cameraManager?.currentLensFacing?.collectAsState() ?: remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
+    val isFrontCamera = currentLensFacing == CameraSelector.LENS_FACING_FRONT
+
     // --- Safe Face Data Collection ---
-    // We observe the flows only if safeFaceTracker is not null
     val faceDetected = safeFaceTracker?.faceDetected?.collectAsState()?.value ?: false
     val landmarks = safeFaceTracker?.landmarks?.collectAsState()?.value ?: emptyList()
 
@@ -76,8 +81,9 @@ fun MainScreen() {
 
             safeFaceTracker = viewModel.faceTracker
 
-            cameraManager = CameraManager(context, lifecycleOwner, viewModel.faceTracker)
-            cameraManager?.startCamera(preview)
+            val manager = CameraManager(context, lifecycleOwner, viewModel.faceTracker)
+            cameraManager = manager
+            manager.startCamera(preview)
         } catch (e: Exception) {
             initError = e.message
         }
@@ -109,12 +115,22 @@ fun MainScreen() {
                 // Camera View
                 AndroidView(factory = { previewView!! }, modifier = Modifier.fillMaxSize())
 
-                // Face Grid Overlay
+                // Face Grid Overlay (Pass isFrontCamera to fix rotation)
                 if (faceDetected && landmarks.isNotEmpty()) {
-                    FaceLandmarkOverlay(landmarks)
+                    FaceLandmarkOverlay(landmarks, isFrontCamera)
                 }
 
-                // Lighting Warning Banner (Overlay)
+                // Camera Controls (Switch/Flash)
+                if (cameraManager != null) {
+                    CameraControls(
+                        cameraManager = cameraManager!!,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(16.dp)
+                    )
+                }
+
+                // Lighting Warning Banner
                 if (qualityMsg.isNotEmpty()) {
                     LightingWarningBanner(qualityMsg, Modifier.align(Alignment.TopCenter))
                 }
@@ -282,6 +298,81 @@ fun MainScreen() {
 // ========== SUB-COMPOSABLES ==========
 
 @Composable
+fun FaceLandmarkOverlay(
+    landmarks: List<Pair<Float, Float>>,
+    isFrontCamera: Boolean // New parameter
+) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        landmarks.forEach { (oldX, oldY) ->
+            // Fix rotation based on Camera Lens
+            val rotatedX = 1f - oldY
+            val rotatedY = if (isFrontCamera) {
+                1f - oldX // Front: 270 deg (Mirror)
+            } else {
+                oldX      // Back: 90 deg (No Mirror)
+            }
+
+            drawCircle(
+                color = Color(0xFF00FF88).copy(alpha = 0.5f),
+                radius = 3f,
+                center = Offset(
+                    x = rotatedX * size.width,
+                    y = rotatedY * size.height
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun CameraControls(
+    cameraManager: CameraManager,
+    modifier: Modifier = Modifier
+) {
+    val isFlashOn by cameraManager.isFlashOn.collectAsState()
+    val hasFlash by cameraManager.hasFlash.collectAsState()
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Switch Camera Button
+        FilledTonalIconButton(
+            onClick = { cameraManager.switchCamera() },
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = Color(0xFF1A1F3A).copy(alpha = 0.8f),
+                contentColor = Color.White
+            ),
+            modifier = Modifier.size(44.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Cameraswitch,
+                contentDescription = "Switch Camera",
+                tint = Color(0xFF00FF88)
+            )
+        }
+
+        // Flash Button
+        if (hasFlash) {
+            FilledTonalIconButton(
+                onClick = { cameraManager.toggleFlash() },
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (isFlashOn) Color(0xFFFFAA00).copy(alpha = 0.8f) else Color(0xFF1A1F3A).copy(alpha = 0.8f),
+                    contentColor = Color.White
+                ),
+                modifier = Modifier.size(44.dp)
+            ) {
+                Icon(
+                    imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                    contentDescription = "Toggle Flash",
+                    tint = if (isFlashOn) Color.Black else Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun LightingWarningBanner(msg: String, modifier: Modifier = Modifier) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFFFF4444).copy(alpha = 0.9f)),
@@ -332,27 +423,8 @@ fun GraphContent(signalData: List<Float>, confidence: Float) {
 }
 
 @Composable
-fun FaceLandmarkOverlay(landmarks: List<Pair<Float, Float>>) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        landmarks.forEach { (oldX, oldY) ->
-            // Rotated Coordinates for Portrait Mode
-            val rotatedX = 1f - oldY
-            val rotatedY = 1f - oldX
-
-            drawCircle(
-                color = Color(0xFF00FF88).copy(alpha = 0.5f),
-                radius = 3f,
-                center = Offset(
-                    x = rotatedX * size.width,
-                    y = rotatedY * size.height
-                )
-            )
-        }
-    }
-}
-
-@Composable
 fun AnimatedHeartbeat(bpm: Float, modifier: Modifier = Modifier) {
+    val beatInterval = (60000f / bpm).coerceAtLeast(200f).toLong()
     val infiniteTransition = rememberInfiniteTransition(label = "beat")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,

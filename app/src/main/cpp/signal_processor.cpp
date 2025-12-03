@@ -164,3 +164,63 @@ float SignalProcessor::computeHeartRate() {
 
     return mPrevHR; // Return last known good value if no peak found
 }
+
+// --- NEW FUNCTION ---
+// Extracts Respiration Rate from the same PPG signal
+// Range: 6 - 30 Breaths/min (0.1 Hz - 0.5 Hz)
+float SignalProcessor::computeRespirationRate() {
+    int N = mRawBuffer.size();
+    // Breathing is slow, so we need a fuller buffer (at least ~5-10 seconds)
+    if (N < mSamplingRate * 5) {
+        return 0.0f;
+    }
+
+    // 1. Prepare data (Normalize & Window)
+    std::vector<float> processed;
+    normalizeBuffer(mRawBuffer, processed);
+    applyWindow(processed);
+
+    // 2. Fill FFT input
+    for (int i = 0; i < N; ++i) {
+        mFftIn[i].r = processed[i];
+        mFftIn[i].i = 0.0f;
+    }
+    for (int i = N; i < mBufferSize; ++i) {
+        mFftIn[i].r = 0.0f;
+        mFftIn[i].i = 0.0f;
+    }
+
+    // 3. Execute FFT
+    kiss_fft(mFftCfg, mFftIn.data(), mFftOut.data());
+
+    // 4. Find Peak in Respiration Range
+    // 0.1 Hz = 6 breaths/min
+    // 0.5 Hz = 30 breaths/min
+    float minFreq = 0.1f;
+    float maxFreq = 0.5f;
+
+    float maxMagnitude = 0.0f;
+    int peakIndex = -1;
+
+    for (int i = 1; i < mBufferSize / 2; ++i) {
+        float freq = (i * mSamplingRate) / mBufferSize;
+
+        if (freq >= minFreq && freq <= maxFreq) {
+            float magnitude = sqrtf(mFftOut[i].r * mFftOut[i].r + mFftOut[i].i * mFftOut[i].i);
+
+            // Peak detection logic
+            if (magnitude > maxMagnitude) {
+                maxMagnitude = magnitude;
+                peakIndex = i;
+            }
+        }
+    }
+
+    // 5. Convert to Breaths Per Minute
+    if (peakIndex != -1) {
+        float freq = (peakIndex * mSamplingRate) / mBufferSize;
+        return freq * 60.0f;
+    }
+
+    return 0.0f;
+}

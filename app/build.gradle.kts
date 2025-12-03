@@ -135,4 +135,15 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+
+    // Camera & Vision (UPDATED)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+
+    // Arm Optimized AI (UPDATED)
+    implementation(libs.mediapipe.tasks.vision)
+    implementation(libs.mediapipe.tasks.genai)  
+
+
 }
