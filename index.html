@@ -152,6 +152,7 @@
             transition: all 0.3s;
             box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
             border: none;
+            cursor: pointer; /* Add pointer cursor */
         }
 
         .btn-primary:hover {
@@ -389,7 +390,7 @@
         <a href="#features">Features</a>
         <a href="#architecture">Architecture</a>
         <a href="#optimization">Arm AI</a>
-        <a href="https://github.com/namdpran8/Ojas" target="_blank" class="btn-github">
+        <a href="https://github.com/namdpran8/Ojas"  class="btn-github">
             <i class="fab fa-github"></i> GitHub
         </a>
     </nav>
@@ -400,7 +401,9 @@
     <h1>Your Health, <br><span>Analyzed by Light.</span></h1>
     <p>Real-time, contactless Heart Rate and Stress monitoring powered by Arm AI. No wearables needed—just your face and your phone.</p>
     <div class="cta-buttons">
-        <a href="https://github.com/namdpran8/Ojas/releases" target="_blank" class="btn-primary">
+        <a href="https://github.com/namdpran8/Ojas/releases"
+           class="btn-primary"
+           onclick="window.open('https://release-assets.githubusercontent.com/github-production-release-asset/1102943155/bbc96121-d9b0-44b8-b185-0665b435a402?sp=r&sv=2018-11-09&sr=b&spr=https&se=2025-12-03T21%3A42%3A17Z&rscd=attachment%3B+filename%3Dapp-debug.apk&rsct=application%2Fvnd.android.package-archive&skoid=96c2d410-5711-43a1-aedd-ab1947aa7ab0&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skt=2025-12-03T20%3A41%3A55Z&ske=2025-12-03T21%3A42%3A17Z&sks=b&skv=2018-11-09&sig=wysNLcpJX5Ez1gbx%2FliKveZIPhXfzZYoJ8ejg8ATKMw%3D&jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmVsZWFzZS1hc3NldHMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwia2V5Ijoia2V5MSIsImV4cCI6MTc2NDc5NjMxNiwibmJmIjoxNzY0Nzk0NTE2LCJwYXRoIjoicmVsZWFzZWFzc2V0cHJvZHVjdGlvbi5ibG9iLmNvcmUud2luZG93cy5uZXQifQ.q6SRj2YXE4TzPrsuUHEJcWl1ddPcWiYjr6oYMP1KD98&response-content-disposition=attachment%3B%20filename%3Dapp-debug.apk&response-content-type=application%2Fvnd.android.package-archive', '_blank');">
             <i class="fab fa-android"></i> Download APK
         </a>
         <a href="#architecture" class="btn-secondary">See System Design</a>
@@ -438,7 +441,7 @@
 
     <!-- 3D Container for the diagram -->
     <div class="architecture-container">
-        <img src="https://github.com/namdpran8/Ojas/blob/master/imageresource/ojas1.png?raw=true" alt="Ojas System Architecture Diagram" class="arch-img">
+        <img src="https://raw.githubusercontent.com/namdpran8/Ojas/refs/heads/master/imageresource/ojas1.png" alt="Ojas System Architecture Diagram" class="arch-img">
     </div>
 
     <!-- Technical Details -->
@@ -475,9 +478,10 @@
 <!-- Footer -->
 <footer>
     <p>&copy; 2025 Ojas Project. Built for the Arm AI Developer Challenge.</p>
-    <div style="margin-top: 20px;">
+    <div style="margin-top: 10px; margin-bottom: 20px;">
         <a href="https://github.com/namdpran8" style="margin: 0 10px;"><i class="fab fa-github"></i> @namdpran8</a>
     </div>
+    <p style="font-size: 0.8rem; color: var(--text-gray);">Developed by Pranshu Namdeo</p>
 </footer>
 
 </body>
