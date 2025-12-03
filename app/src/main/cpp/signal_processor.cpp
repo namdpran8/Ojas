@@ -13,7 +13,7 @@ SignalProcessor::SignalProcessor(int bufferSize, float samplingRate)
     mRawBuffer.reserve(bufferSize);
     mTimeBuffer.reserve(bufferSize);
 
-    // Initialize FFT (nfft should ideally be power of 2, but kiss_fft handles others)
+    // Initialize KissFFT
     mFftCfg = kiss_fft_alloc(bufferSize, 0, nullptr, nullptr);
     mFftIn.resize(bufferSize);
     mFftOut.resize(bufferSize);
@@ -25,7 +25,6 @@ SignalProcessor::~SignalProcessor() {
 
 void SignalProcessor::addSample(float greenValue, long timestamp) {
     if (mRawBuffer.size() >= mBufferSize) {
-        // Slide window: remove oldest
         mRawBuffer.erase(mRawBuffer.begin());
         mTimeBuffer.erase(mTimeBuffer.begin());
     }
@@ -47,22 +46,18 @@ int SignalProcessor::getSampleCount() const {
     return mRawBuffer.size();
 }
 
-// Helper: Remove DC component and normalize
 void SignalProcessor::normalizeBuffer(const std::vector<float>& input, std::vector<float>& output) {
     output = input;
     if (input.empty()) return;
 
-    // Calculate mean
     float sum = std::accumulate(input.begin(), input.end(), 0.0f);
     float mean = sum / input.size();
 
-    // Subtract mean (detrending DC)
     for (float &val : output) {
         val -= mean;
     }
 }
 
-// Helper: Apply Hamming window to reduce spectral leakage
 void SignalProcessor::applyWindow(std::vector<float>& data) {
     size_t N = data.size();
     for (size_t i = 0; i < N; ++i) {
@@ -78,7 +73,7 @@ float SignalProcessor::computeHeartRate() {
         return 0.0f;
     }
 
-    // 1. Prepare data (Normalize & Window)
+    // 1. Prepare data
     std::vector<float> processed;
     normalizeBuffer(mRawBuffer, processed);
     applyWindow(processed);
@@ -93,18 +88,17 @@ float SignalProcessor::computeHeartRate() {
         mFftIn[i].i = 0.0f;
     }
 
-    // 3. Execute FFT
+    // 3. Execute FFT (Using KissFFT)
     kiss_fft(mFftCfg, mFftIn.data(), mFftOut.data());
 
-    // 4. Define Search Range
-    // Default: 45 BPM (0.75 Hz) to 200 BPM (3.33 Hz) - Cap at 200 to avoid high freq noise
+    // 4. Define Search Range (45 - 200 BPM)
     float minFreq = 0.75f;
     float maxFreq = 3.33f;
 
-    // SMART SEARCH: If we have a previous HR, restrict search to +/- 15 BPM
+    // Smart Search: Narrow window if we have a previous lock
     if (mPrevHR > 0.0f) {
         float prevFreq = mPrevHR / 60.0f;
-        float window = 15.0f / 60.0f; // 15 BPM window
+        float window = 15.0f / 60.0f; // +/- 15 BPM
         minFreq = std::max(0.75f, prevFreq - window);
         maxFreq = std::min(3.33f, prevFreq + window);
     }
@@ -117,17 +111,15 @@ float SignalProcessor::computeHeartRate() {
 
     for (int i = 1; i < mBufferSize / 2; ++i) {
         float freq = (i * mSamplingRate) / mBufferSize;
-
-        // Compute magnitude for SNR calculation
         float magnitude = sqrtf(mFftOut[i].r * mFftOut[i].r + mFftOut[i].i * mFftOut[i].i);
 
-        // Only sum magnitude in the valid human heart rate range for average noise level
+        // Calculate average noise in valid range
         if (freq >= 0.75f && freq <= 3.33f) {
             sumMagnitude += magnitude;
             countMagnitude++;
         }
 
-        // Check for peak within our specific (possibly narrowed) search window
+        // Peak Tracking
         if (freq >= minFreq && freq <= maxFreq) {
             if (magnitude > maxMagnitude) {
                 maxMagnitude = magnitude;
@@ -137,12 +129,10 @@ float SignalProcessor::computeHeartRate() {
     }
 
     // 6. Validate Signal Quality (SNR)
-    // If the peak isn't significantly louder than the background noise, ignore it.
     if (countMagnitude > 0) {
         float avgMagnitude = sumMagnitude / countMagnitude;
-        // Threshold: Peak must be at least 2x the average noise
+        // Peak must be at least 2x the average noise
         if (maxMagnitude < avgMagnitude * 2.0f) {
-            // Signal too weak or noisy, keep previous estimate or return 0
             return mPrevHR > 0 ? mPrevHR : 0.0f;
         }
     }
@@ -152,75 +142,14 @@ float SignalProcessor::computeHeartRate() {
         float freq = (peakIndex * mSamplingRate) / mBufferSize;
         float currentBpm = freq * 60.0f;
 
-        // Smooth update: 30% new value, 70% old value to reduce jitter
+        // Smooth update (Exponential Moving Average)
         if (mPrevHR > 0.0f) {
             mPrevHR = (mPrevHR * 0.7f) + (currentBpm * 0.3f);
         } else {
             mPrevHR = currentBpm;
         }
-
         return mPrevHR;
     }
 
-    return mPrevHR; // Return last known good value if no peak found
-}
-
-// --- NEW FUNCTION ---
-// Extracts Respiration Rate from the same PPG signal
-// Range: 6 - 30 Breaths/min (0.1 Hz - 0.5 Hz)
-float SignalProcessor::computeRespirationRate() {
-    int N = mRawBuffer.size();
-    // Breathing is slow, so we need a fuller buffer (at least ~5-10 seconds)
-    if (N < mSamplingRate * 5) {
-        return 0.0f;
-    }
-
-    // 1. Prepare data (Normalize & Window)
-    std::vector<float> processed;
-    normalizeBuffer(mRawBuffer, processed);
-    applyWindow(processed);
-
-    // 2. Fill FFT input
-    for (int i = 0; i < N; ++i) {
-        mFftIn[i].r = processed[i];
-        mFftIn[i].i = 0.0f;
-    }
-    for (int i = N; i < mBufferSize; ++i) {
-        mFftIn[i].r = 0.0f;
-        mFftIn[i].i = 0.0f;
-    }
-
-    // 3. Execute FFT
-    kiss_fft(mFftCfg, mFftIn.data(), mFftOut.data());
-
-    // 4. Find Peak in Respiration Range
-    // 0.1 Hz = 6 breaths/min
-    // 0.5 Hz = 30 breaths/min
-    float minFreq = 0.1f;
-    float maxFreq = 0.5f;
-
-    float maxMagnitude = 0.0f;
-    int peakIndex = -1;
-
-    for (int i = 1; i < mBufferSize / 2; ++i) {
-        float freq = (i * mSamplingRate) / mBufferSize;
-
-        if (freq >= minFreq && freq <= maxFreq) {
-            float magnitude = sqrtf(mFftOut[i].r * mFftOut[i].r + mFftOut[i].i * mFftOut[i].i);
-
-            // Peak detection logic
-            if (magnitude > maxMagnitude) {
-                maxMagnitude = magnitude;
-                peakIndex = i;
-            }
-        }
-    }
-
-    // 5. Convert to Breaths Per Minute
-    if (peakIndex != -1) {
-        float freq = (peakIndex * mSamplingRate) / mBufferSize;
-        return freq * 60.0f;
-    }
-
-    return 0.0f;
+    return mPrevHR;
 }

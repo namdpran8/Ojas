@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.22.1)
 
+
+
 project(ojas LANGUAGES C CXX)
 
 # C++ standard
@@ -7,8 +9,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+
 # Main native library
 add_library(ojas SHARED
+
         native-lib.cpp
         signal_processor.cpp
         kiss_fft.c
