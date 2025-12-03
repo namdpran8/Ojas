@@ -1,6 +1,5 @@
 package com.pranshu.ojas.ui
 
-import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.*
