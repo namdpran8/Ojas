@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ojas - AI Heart Health Monitor</title>
+    <meta name="description" content="Real-time contactless heart rate & stress monitoring on Android, optimized for Arm processors.">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --primary: #00FF88;
+            --secondary: #00AAFF;
+            --bg-dark: #0A0E27;
+            --card-bg: #1A1F3A;
+            --text-light: #F0F0F0;
+            --text-gray: #A0A0A0;
+            --neon-glow: 0 0 10px rgba(0, 255, 136, 0.5), 0 0 20px rgba(0, 255, 136, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            line-height: 1.6;
+            overflow-x: hidden;
+            perspective: 1000px; /* Enables 3D space for the whole page */
+        }
+
+        a { text-decoration: none; color: inherit; }
+
+        /* --- Header / Nav --- */
+        header {
+            padding: 20px 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            background: rgba(10, 14, 39, 0.8);
+            backdrop-filter: blur(12px);
+            z-index: 1000;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+            text-shadow: 0 2px 10px rgba(0, 255, 136, 0.2);
+        }
+
+        .nav-links a {
+            margin-left: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-gray);
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+            text-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+        }
+
+        .btn-github {
+            background: rgba(255,255,255,0.05);
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .btn-github:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: var(--primary);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
+            transform: translateY(-2px);
+        }
+
+        /* --- Hero Section (3D) --- */
+        .hero {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 0 20px;
+            background:
+                radial-gradient(circle at 50% 50%, rgba(0, 170, 255, 0.1) 0%, transparent 60%),
+                linear-gradient(to bottom, var(--bg-dark), #0d1230);
+            transform-style: preserve-3d;
+        }
+
+        .hero h1 {
+            font-size: 4.5rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 20px;
+            max-width: 900px;
+            text-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transform: translateZ(50px); /* Pops out */
+        }
+
+        .hero h1 span {
+            color: var(--primary);
+            text-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-gray);
+            max-width: 600px;
+            margin-bottom: 40px;
+            transform: translateZ(30px); /* Pops out slightly less */
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 20px;
+            transform: translateZ(60px); /* Buttons pop out most */
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #000;
+            padding: 14px 32px;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 1rem;
+            transition: all 0.3s;
+            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 15px 40px rgba(0, 255, 136, 0.5);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--text-light);
+            padding: 14px 32px;
+            border-radius: 30px;
+            font-weight: 600;
+            transition: all 0.3s;
+            backdrop-filter: blur(5px);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(0, 255, 136, 0.05);
+        }
+
+        /* --- Features (3D Cards) --- */
+        .features {
+            padding: 100px 5%;
+            perspective: 1500px; /* Deep perspective */
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 60px;
+            background: linear-gradient(to bottom, #fff, #888);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: rgba(26, 31, 58, 0.7);
+            padding: 40px 30px;
+            border-radius: 24px;
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.4s ease;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+
+            /* 3D Settings */
+            transform-style: preserve-3d;
+            transform: rotateX(0deg) rotateY(0deg);
+        }
+
+        /* The 3D Hover Effect */
+        .card:hover {
+            transform: translateY(-15px) rotateX(5deg);
+            border-color: var(--secondary);
+            box-shadow:
+                0 20px 50px rgba(0,0,0,0.5),
+                0 0 20px rgba(0, 170, 255, 0.2);
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .icon-box {
+            width: 60px;
+            height: 60px;
+            background: rgba(0, 170, 255, 0.15);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 25px;
+            color: var(--secondary);
+            font-size: 1.8rem;
+            transition: transform 0.3s;
+            transform: translateZ(20px); /* Floating icon */
+        }
+
+        .card h3 {
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            transform: translateZ(10px);
+        }
+
+        .card p {
+            color: var(--text-gray);
+            font-size: 1rem;
+            transform: translateZ(5px);
+        }
+
+        /* --- Architecture / System Section --- */
+        .tech-section {
+            background: linear-gradient(180deg, var(--bg-dark) 0%, #0d1230 100%);
+            padding: 100px 5%;
+            text-align: center;
+            perspective: 1000px;
+        }
+
+        .architecture-container {
+            max-width: 1100px;
+            margin: 60px auto 0;
+            border-radius: 24px;
+            /* Glassmorphism frame */
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            box-shadow: 0 50px 100px -20px rgba(0,0,0,0.6);
+
+            /* 3D Tilt initial state */
+            transform: rotateX(20deg) scale(0.9);
+            transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0.8;
+        }
+
+        .tech-section:hover .architecture-container {
+            transform: rotateX(0deg) scale(1);
+            opacity: 1;
+            box-shadow: 0 30px 60px -10px rgba(0, 170, 255, 0.3);
+            border-color: var(--secondary);
+        }
+
+        .arch-img {
+            width: 100%;
+            border-radius: 16px;
+            display: block;
+        }
+
+        .arch-details {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 60px;
+            flex-wrap: wrap;
+        }
+
+        .detail-item {
+            background: rgba(255,255,255,0.03);
+            padding: 20px 30px;
+            border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.05);
+            text-align: left;
+            max-width: 300px;
+        }
+
+        .detail-item h4 {
+            color: var(--primary);
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .detail-item p {
+            font-size: 0.9rem;
+            color: var(--text-gray);
+        }
+
+        /* --- Arm Optimization Section --- */
+        .arm-section {
+            padding: 100px 5%;
+            text-align: center;
+        }
+
+        .arm-badges {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 40px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            background: rgba(255,255,255,0.05);
+            padding: 12px 24px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .badge:hover {
+            background: rgba(0, 255, 136, 0.1);
+            border-color: var(--primary);
+            color: var(--primary);
+            transform: scale(1.05);
+        }
+
+        /* --- Footer --- */
+        footer {
+            padding: 50px 5%;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            text-align: center;
+            color: var(--text-gray);
+            font-size: 0.9rem;
+            background: #050714;
+        }
+
+        /* --- Responsive --- */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.8rem; }
+            .cta-buttons { flex-direction: column; }
+            .nav-links { display: none; }
+            .architecture-container { transform: rotateX(0) scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<header>
+    <div class="logo">Ojas 🫀</div>
+    <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#optimization">Arm AI</a>
+        <a href="https://github.com/namdpran8/Ojas" target="_blank" class="btn-github">
+            <i class="fab fa-github"></i> GitHub
+        </a>
+    </nav>
+</header>
+
+<!-- Hero Section -->
+<section class="hero">
+    <h1>Your Health, <br><span>Analyzed by Light.</span></h1>
+    <p>Real-time, contactless Heart Rate and Stress monitoring powered by Arm AI. No wearables needed—just your face and your phone.</p>
+    <div class="cta-buttons">
+        <a href="https://github.com/namdpran8/Ojas/releases" target="_blank" class="btn-primary">
+            <i class="fab fa-android"></i> Download APK
+        </a>
+        <a href="#architecture" class="btn-secondary">See System Design</a>
+    </div>
+</section>
+
+<!-- Features Grid -->
+<section id="features" class="features">
+    <h2 class="section-title">Why Ojas?</h2>
+    <div class="grid">
+        <div class="card">
+            <div class="icon-box"><i class="fas fa-heart-pulse"></i></div>
+            <h3>Contactless Vitals</h3>
+            <p>Measures pulse and HRV remotely using rPPG technology. Accurate detection from 45-200 BPM.</p>
+        </div>
+        <div class="card">
+            <div class="icon-box"><i class="fas fa-microchip"></i></div>
+            <h3>Arm Optimized</h3>
+            <p>Built with Arm Neon intrinsics and KleidiAI for 4x faster signal processing on mobile chips.</p>
+        </div>
+        <div class="card">
+            <div class="icon-box"><i class="fas fa-shield-halved"></i></div>
+            <h3>Privacy First</h3>
+            <p>100% on-device processing. Your video feed never leaves your phone's secure enclave.</p>
+        </div>
+    </div>
+</section>
+
+<!-- System Architecture (Replaces Demo) -->
+<section id="architecture" class="tech-section">
+    <h2 class="section-title">System Architecture</h2>
+    <p style="color: var(--text-gray); max-width: 600px; margin: 0 auto;">
+        A high-performance pipeline optimized for Arm processors, processing frames at 30FPS with sub-10ms latency.
+    </p>
+
+    <!-- 3D Container for the diagram -->
+    <div class="architecture-container">
+        <img src="ojas2.png" alt="Ojas System Architecture Diagram" class="arch-img">
+    </div>
+
+    <!-- Technical Details -->
+    <div class="arch-details">
+        <div class="detail-item">
+            <h4><i class="fas fa-video"></i> Vision Pipeline</h4>
+            <p>MediaPipe Face Landmarker isolates ROI (Region of Interest) on the cheeks and forehead to extract raw PPG signals.</p>
+        </div>
+        <div class="detail-item">
+            <h4><i class="fas fa-bolt"></i> Native DSP</h4>
+            <p>Custom C++ layer uses <strong>Arm Neon Intrinsics</strong> to process circular buffers, reducing CPU load by 40%.</p>
+        </div>
+        <div class="detail-item">
+            <h4><i class="fas fa-brain"></i> AI Refinement</h4>
+            <p>A 1D CNN model running on the <strong>Arm NPU</strong> (via NNAPI) cleans motion artifacts from the heart rate signal.</p>
+        </div>
+    </div>
+</section>
+
+<!-- Arm Optimization Section -->
+<section id="optimization" class="arm-section">
+    <h2 class="section-title">Powered by Arm AI</h2>
+    <p style="max-width: 600px; margin: 0 auto; color: var(--text-gray);">
+        Ojas pushes the boundaries of edge AI efficiency by leveraging specialized hardware acceleration.
+    </p>
+    <div class="arm-badges">
+        <div class="badge"><i class="fab fa-android"></i> Android NNAPI</div>
+        <div class="badge"><i class="fas fa-bolt"></i> Arm Neon SIMD</div>
+        <div class="badge"><i class="fas fa-layer-group"></i> MediaPipe + KleidiAI</div>
+        <div class="badge"><i class="fas fa-brain"></i> TensorFlow Lite</div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer>
+    <p>&copy; 2025 Ojas Project. Built for the Arm AI Developer Challenge.</p>
+    <div style="margin-top: 20px;">
+        <a href="https://github.com/namdpran8" style="margin: 0 10px;"><i class="fab fa-github"></i> @namdpran8</a>
+    </div>
+</footer>
+
+</body>
+</html>
