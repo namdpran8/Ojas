@@ -90,5 +90,8 @@ class NativeSignalProcessor(
 
     companion object {
         private const val TAG = "NativeSignalProcessor"
+
+        @JvmStatic
+        external fun computeGreenAverage(imageData: ByteArray, width: Int, height: Int): Float
     }
 }

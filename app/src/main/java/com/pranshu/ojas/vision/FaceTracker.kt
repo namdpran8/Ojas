@@ -105,8 +105,11 @@ class FaceTracker(context: Context) {
         }
     }
 
+    private var pixelBuffer: java.nio.ByteBuffer? = null
+    private var pixelByteArray: ByteArray? = null
+
     /**
-     * Extract average green channel intensity from face ROI
+     * Extract average green channel intensity from face ROI using NEON optimization
      */
     private fun extractGreenSignal(
         bitmap: Bitmap,
@@ -115,85 +118,39 @@ class FaceTracker(context: Context) {
         val width = bitmap.width
         val height = bitmap.height
 
-        // Collect ROI pixels from forehead and cheeks
-        val roiPixels = mutableListOf<Int>()
+        var minX = Float.MAX_VALUE
+        var minY = Float.MAX_VALUE
+        var maxX = Float.MIN_VALUE
+        var maxY = Float.MIN_VALUE
 
-        // Extract forehead region
-        foreheadIndices.forEach { index ->
+        val allIndices = foreheadIndices + leftCheekIndices + rightCheekIndices
+        allIndices.forEach { index ->
             if (index < landmarks.size) {
-                val landmark = landmarks[index]
-                val x = (landmark.x() * width).toInt().coerceIn(0, width - 1)
-                val y = (landmark.y() * height).toInt().coerceIn(0, height - 1)
-
-                // Sample 3x3 region around landmark
-                for (dy in -1..1) {
-                    for (dx in -1..1) {
-                        val px = (x + dx).coerceIn(0, width - 1)
-                        val py = (y + dy).coerceIn(0, height - 1)
-                        try {
-                            roiPixels.add(bitmap.getPixel(px, py))
-                        } catch (e: Exception) {
-                            // Skip invalid pixels
-                        }
-                    }
-                }
+                val lm = landmarks[index]
+                if (lm.x() < minX) minX = lm.x()
+                if (lm.y() < minY) minY = lm.y()
+                if (lm.x() > maxX) maxX = lm.x()
+                if (lm.y() > maxY) maxY = lm.y()
             }
         }
 
-        // Extract left cheek region
-        leftCheekIndices.forEach { index ->
-            if (index < landmarks.size) {
-                val landmark = landmarks[index]
-                val x = (landmark.x() * width).toInt().coerceIn(0, width - 1)
-                val y = (landmark.y() * height).toInt().coerceIn(0, height - 1)
+        val px = (minX * width).toInt().coerceIn(0, width - 1)
+        val py = (minY * height).toInt().coerceIn(0, height - 1)
+        val w = ((maxX - minX) * width).toInt().coerceAtLeast(1).coerceAtMost(width - px)
+        val h = ((maxY - minY) * height).toInt().coerceAtLeast(1).coerceAtMost(height - py)
 
-                for (dy in -1..1) {
-                    for (dx in -1..1) {
-                        val px = (x + dx).coerceIn(0, width - 1)
-                        val py = (y + dy).coerceIn(0, height - 1)
-                        try {
-                            roiPixels.add(bitmap.getPixel(px, py))
-                        } catch (e: Exception) {
-                            // Skip
-                        }
-                    }
-                }
-            }
+        val faceBitmap = Bitmap.createBitmap(bitmap, px, py, w, h)
+        val size = faceBitmap.rowBytes * faceBitmap.height
+
+        if (pixelByteArray == null || pixelByteArray!!.size < size) {
+            pixelByteArray = ByteArray(size)
+            pixelBuffer = java.nio.ByteBuffer.wrap(pixelByteArray)
         }
 
-        // Extract right cheek region
-        rightCheekIndices.forEach { index ->
-            if (index < landmarks.size) {
-                val landmark = landmarks[index]
-                val x = (landmark.x() * width).toInt().coerceIn(0, width - 1)
-                val y = (landmark.y() * height).toInt().coerceIn(0, height - 1)
+        pixelBuffer!!.position(0)
+        faceBitmap.copyPixelsToBuffer(pixelBuffer!!)
 
-                for (dy in -1..1) {
-                    for (dx in -1..1) {
-                        val px = (x + dx).coerceIn(0, width - 1)
-                        val py = (y + dy).coerceIn(0, height - 1)
-                        try {
-                            roiPixels.add(bitmap.getPixel(px, py))
-                        } catch (e: Exception) {
-                            // Skip
-                        }
-                    }
-                }
-            }
-        }
-
-        // Compute average green channel value
-        if (roiPixels.isEmpty()) {
-            return 0f
-        }
-
-        var greenSum = 0f
-        roiPixels.forEach { pixel ->
-            val green = (pixel shr 8) and 0xFF
-            greenSum += green.toFloat()
-        }
-
-        return greenSum / roiPixels.size
+        return com.pranshu.ojas.core.NativeSignalProcessor.computeGreenAverage(pixelByteArray!!, w, h)
     }
 
     fun release() {

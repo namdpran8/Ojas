@@ -96,7 +96,7 @@ fun MainScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0E27)) // Dark Background
+            .background(MaterialTheme.colorScheme.background)
     ) {
         // ---------------------------------------------------------
         // TOP HALF: Camera Preview (45%)
@@ -150,8 +150,8 @@ fun MainScreen() {
         ) {
 
             // 1. Stress & Analysis Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1F3A)),
+            ElevatedCard(
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -162,21 +162,20 @@ fun MainScreen() {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Analysis", color = Color.Gray, fontSize = 12.sp)
+                        Text("Analysis", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = if(stressLevel.contains("Analyzing")) "Gathering data..." else stressLevel,
-                            color = Color(0xFF00AAFF),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            lineHeight = 20.sp
+                            color = MaterialTheme.colorScheme.secondary,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                     if (status == MeasurementStatus.MEASURING) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp),
                             strokeWidth = 2.dp,
-                            color = Color(0xFF00AAFF)
+                            color = MaterialTheme.colorScheme.secondary
                         )
                     }
                 }
@@ -190,8 +189,8 @@ fun MainScreen() {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Left: Status & Quality
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1F3A)),
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.weight(1f).fillMaxHeight()
                 ) {
@@ -201,16 +200,16 @@ fun MainScreen() {
                         horizontalAlignment = Alignment.Start
                     ) {
                         Column {
-                            Text("Status", color = Color.Gray, fontSize = 11.sp)
+                            Text("Status", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                             Text(
                                 text = getStatusText(status),
                                 color = getStatusColor(status),
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
                             )
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            Text("Signal Quality", color = Color.Gray, fontSize = 11.sp)
+                            Text("Signal Quality", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
@@ -221,8 +220,8 @@ fun MainScreen() {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = getQualityText(confidence),
-                                    color = Color.White,
-                                    fontSize = 13.sp
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.labelLarge
                                 )
                             }
                         }
@@ -232,17 +231,18 @@ fun MainScreen() {
                             onClick = { viewModel.reset() },
                             modifier = Modifier.size(32.dp).align(Alignment.End),
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = Color(0xFF2A2F4A)
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         ) {
-                            Icon(Icons.Default.Refresh, "Reset", tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp))
                         }
                     }
                 }
 
                 // Right: BPM Count
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1F3A)),
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     shape = RoundedCornerShape(16.dp),
                     modifier = Modifier.weight(0.8f).fillMaxHeight()
                 ) {
@@ -251,19 +251,19 @@ fun MainScreen() {
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("HEART RATE", color = Color.Gray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("HEART RATE", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
 
                         Row(verticalAlignment = Alignment.Bottom) {
                             Text(
                                 text = if (heartRate > 0) "${heartRate.toInt()}" else "--",
-                                fontSize = 48.sp,
+                                style = MaterialTheme.typography.displayMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = " bpm",
-                                fontSize = 14.sp,
-                                color = Color(0xFF00FF88),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(bottom = 8.dp)
                             )
                         }
@@ -277,15 +277,15 @@ fun MainScreen() {
             }
 
             // 3. Heart Beat Graph
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1F3A)),
+            ElevatedCard(
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    Text("Live Pulse Signal", color = Color.Gray, fontSize = 12.sp)
+                    Text("Live Pulse Signal", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(8.dp))
                     GraphContent(signalBuffer, confidence)
                 }
@@ -301,6 +301,7 @@ fun FaceLandmarkOverlay(
     landmarks: List<Pair<Float, Float>>,
     isFrontCamera: Boolean // New parameter
 ) {
+    val landmarkColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
     Canvas(modifier = Modifier.fillMaxSize()) {
         landmarks.forEach { (oldX, oldY) ->
             // Fix rotation based on Camera Lens
@@ -312,7 +313,7 @@ fun FaceLandmarkOverlay(
             }
 
             drawCircle(
-                color = Color(0xFF00FF88).copy(alpha = 0.5f),
+                color = landmarkColor,
                 radius = 3f,
                 center = Offset(
                     x = rotatedX * size.width,
@@ -339,15 +340,15 @@ fun CameraControls(
         FilledTonalIconButton(
             onClick = { cameraManager.switchCamera() },
             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                containerColor = Color(0xFF1A1F3A).copy(alpha = 0.8f),
-                contentColor = Color.White
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
             ),
             modifier = Modifier.size(44.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Cameraswitch,
                 contentDescription = "Switch Camera",
-                tint = Color(0xFF00FF88)
+                tint = MaterialTheme.colorScheme.primary
             )
         }
 
@@ -356,15 +357,15 @@ fun CameraControls(
             FilledTonalIconButton(
                 onClick = { cameraManager.toggleFlash() },
                 colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (isFlashOn) Color(0xFFFFAA00).copy(alpha = 0.8f) else Color(0xFF1A1F3A).copy(alpha = 0.8f),
-                    contentColor = Color.White
+                    containerColor = if (isFlashOn) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                    contentColor = if (isFlashOn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurfaceVariant
                 ),
                 modifier = Modifier.size(44.dp)
             ) {
                 Icon(
                     imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
                     contentDescription = "Toggle Flash",
-                    tint = if (isFlashOn) Color.Black else Color.White
+                    tint = if (isFlashOn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -374,22 +375,23 @@ fun CameraControls(
 @Composable
 fun LightingWarningBanner(msg: String, modifier: Modifier = Modifier) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFF4444).copy(alpha = 0.9f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.9f)),
         modifier = modifier.padding(top = 48.dp)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Warning, null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.onError, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text(msg, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text(msg, color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
         }
     }
 }
 
 @Composable
 fun GraphContent(signalData: List<Float>, confidence: Float) {
+    val strokeColor = getQualityColor(confidence)
     Canvas(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))) {
         if (signalData.isEmpty()) return@Canvas
 
@@ -408,8 +410,6 @@ fun GraphContent(signalData: List<Float>, confidence: Float) {
             val y = height - (normalizedValue * height * 0.8f) - height * 0.1f
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-
-        val strokeColor = getQualityColor(confidence)
 
         drawPath(
             path = path,
@@ -438,7 +438,7 @@ fun AnimatedHeartbeat(bpm: Float, modifier: Modifier = Modifier) {
     Icon(
         imageVector = Icons.Default.Favorite,
         contentDescription = null,
-        tint = Color(0xFFFF4444),
+        tint = MaterialTheme.colorScheme.error,
         modifier = modifier.graphicsLayer {
             scaleX = scale
             scaleY = scale
@@ -452,7 +452,7 @@ fun LoadingScreen() {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        CircularProgressIndicator(color = Color(0xFF00FF88))
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
     }
 }
 
@@ -462,7 +462,7 @@ fun ErrorScreen(error: String) {
         modifier = Modifier.fillMaxSize().background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
-        Text("Camera Error: $error", color = Color.Red, textAlign = TextAlign.Center)
+        Text("Camera Error: $error", color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
     }
 }
 
@@ -477,17 +477,19 @@ private fun getStatusText(status: MeasurementStatus): String = when (status) {
     MeasurementStatus.COMPLETED -> "Done"
 }
 
+@Composable
 private fun getStatusColor(status: MeasurementStatus): Color = when (status) {
-    MeasurementStatus.INITIALIZING, MeasurementStatus.ACQUIRING -> Color(0xFFFFAA00)
-    MeasurementStatus.NO_FACE -> Color(0xFFFF4444)
-    MeasurementStatus.TRACKING, MeasurementStatus.MEASURING -> Color(0xFF00FF88)
-    MeasurementStatus.COMPLETED -> Color.White
+    MeasurementStatus.INITIALIZING, MeasurementStatus.ACQUIRING -> MaterialTheme.colorScheme.tertiary
+    MeasurementStatus.NO_FACE -> MaterialTheme.colorScheme.error
+    MeasurementStatus.TRACKING, MeasurementStatus.MEASURING -> MaterialTheme.colorScheme.primary
+    MeasurementStatus.COMPLETED -> MaterialTheme.colorScheme.onSurface
 }
 
+@Composable
 private fun getQualityColor(confidence: Float): Color = when {
-    confidence >= 0.8f -> Color(0xFF00FF88)
-    confidence >= 0.5f -> Color(0xFFFFAA00)
-    else -> Color(0xFFFF4444)
+    confidence >= 0.8f -> MaterialTheme.colorScheme.primary
+    confidence >= 0.5f -> MaterialTheme.colorScheme.tertiary
+    else -> MaterialTheme.colorScheme.error
 }
 
 private fun getQualityText(confidence: Float): String = when {
