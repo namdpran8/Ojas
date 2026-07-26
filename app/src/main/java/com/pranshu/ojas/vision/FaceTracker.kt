@@ -105,11 +105,10 @@ class FaceTracker(context: Context) {
         }
     }
 
-    private var pixelBuffer: java.nio.ByteBuffer? = null
-    private var pixelByteArray: ByteArray? = null
+    private val patchPixels = IntArray(9)
 
     /**
-     * Extract average green channel intensity from face ROI using NEON optimization
+     * Extract average green channel intensity from discrete skin patches (forehead and cheeks)
      */
     private fun extractGreenSignal(
         bitmap: Bitmap,
@@ -118,39 +117,38 @@ class FaceTracker(context: Context) {
         val width = bitmap.width
         val height = bitmap.height
 
-        var minX = Float.MAX_VALUE
-        var minY = Float.MAX_VALUE
-        var maxX = Float.MIN_VALUE
-        var maxY = Float.MIN_VALUE
+        var greenSum = 0f
+        var count = 0
 
         val allIndices = foreheadIndices + leftCheekIndices + rightCheekIndices
         allIndices.forEach { index ->
             if (index < landmarks.size) {
                 val lm = landmarks[index]
-                if (lm.x() < minX) minX = lm.x()
-                if (lm.y() < minY) minY = lm.y()
-                if (lm.x() > maxX) maxX = lm.x()
-                if (lm.y() > maxY) maxY = lm.y()
+                val cx = (lm.x() * width).toInt()
+                val cy = (lm.y() * height).toInt()
+
+                val startX = (cx - 1).coerceAtLeast(0)
+                val startY = (cy - 1).coerceAtLeast(0)
+                val endX = (cx + 1).coerceAtMost(width - 1)
+                val endY = (cy + 1).coerceAtMost(height - 1)
+                
+                val w = endX - startX + 1
+                val h = endY - startY + 1
+
+                if (w > 0 && h > 0) {
+                    bitmap.getPixels(patchPixels, 0, w, startX, startY, w, h)
+                    val totalPixels = w * h
+                    for (i in 0 until totalPixels) {
+                        val pixel = patchPixels[i]
+                        val green = (pixel shr 8) and 0xFF
+                        greenSum += green
+                    }
+                    count += totalPixels
+                }
             }
         }
 
-        val px = (minX * width).toInt().coerceIn(0, width - 1)
-        val py = (minY * height).toInt().coerceIn(0, height - 1)
-        val w = ((maxX - minX) * width).toInt().coerceAtLeast(1).coerceAtMost(width - px)
-        val h = ((maxY - minY) * height).toInt().coerceAtLeast(1).coerceAtMost(height - py)
-
-        val faceBitmap = Bitmap.createBitmap(bitmap, px, py, w, h)
-        val size = faceBitmap.rowBytes * faceBitmap.height
-
-        if (pixelByteArray == null || pixelByteArray!!.size < size) {
-            pixelByteArray = ByteArray(size)
-            pixelBuffer = java.nio.ByteBuffer.wrap(pixelByteArray)
-        }
-
-        pixelBuffer!!.position(0)
-        faceBitmap.copyPixelsToBuffer(pixelBuffer!!)
-
-        return com.pranshu.ojas.core.NativeSignalProcessor.computeGreenAverage(pixelByteArray!!, w, h)
+        return if (count > 0) greenSum / count else 0f
     }
 
     fun release() {

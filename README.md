@@ -186,11 +186,11 @@ FFT finds dominant frequency in 0.75-3.0 Hz range (45-180 BPM) → converts to h
 
 Ojas isn't just a wrapper around an API; it features custom low-level optimizations for Arm processors:
 
-### 1. **Neon-Accelerated Pixel Extraction**
-Instead of a standard scalar loop, Ojas uses `arm_neon.h` intrinsics to process image data.
-- **Technique**: SIMD (Single Instruction, Multiple Data)
-- **Implementation**: Loads **16 pixels (128 bits)** into NEON registers (`uint8x16x4_t`) and computes channel averages in parallel.
-- **Benefit**: Reduces frame processing time by ~4x compared to scalar C++ code.
+### 1. **Zero-Allocation ROI Extraction**
+To prevent ROI contamination (where non-skin pixels corrupt the heart rate signal), Ojas precisely targets discrete skin patches on the forehead and cheeks using a highly optimized, zero-allocation Kotlin pipeline.
+- **Technique**: Direct Array Buffering
+- **Implementation**: Pre-allocates primitive `IntArray` buffers and uses native Android bitmap extraction `getPixels()` to sample exactly the 3x3 regions surrounding MediaPipe landmarks. 
+- **Benefit**: Achieves the speed of native C++ code while eliminating JNI boundary overhead and preventing garbage collection (GC) pauses during the 30 FPS real-time loop.
 
 ### 2. **KleidiAI Integration**
 We utilize **MediaPipe 0.10.14**, which integrates **Arm KleidiAI** micro-kernels.

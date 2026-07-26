@@ -143,20 +143,7 @@ class CameraManager(
         }
     }
 
-    private fun ImageProxy.toBitmap(): Bitmap {
-        val buffer = planes[0].buffer
-        val bytes = ByteArray(buffer.remaining())
-        buffer.get(bytes)
 
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        bitmap.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(bytes))
-
-        // Rotate bitmap to correct orientation
-        val matrix = Matrix()
-        matrix.postRotate(imageInfo.rotationDegrees.toFloat())
-
-        return Bitmap.createBitmap(bitmap, 0, 0, width, height, matrix, true)
-    }
 
     /**
      * Switch between front and back camera
