@@ -67,13 +67,6 @@ android {
         kotlinCompilerExtensionVersion = "1.5.3"
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
-
 
     packaging {
         resources {
@@ -83,6 +76,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.compose.material:material-icons-extended:1.5.4")
 
     // Kotlin & Compose
     implementation("androidx.core:core-ktx:1.12.0")
@@ -111,8 +105,6 @@ dependencies {
 
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 
-    implementation("org.apache.commons:commons-math3:3.6.1")
-
     // Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.32.0")
     implementation(libs.tensorflow.lite.metadata)
@@ -126,12 +118,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-
-    implementation(libs.androidx.core.ktx)
+    // Missing UI components (required for XML themes)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
-    implementation(libs.androidx.constraintlayout)
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
 }

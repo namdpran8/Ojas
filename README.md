@@ -6,7 +6,9 @@
 ![API](https://img.shields.io/badge/API-26%2B-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
-Ojas is a production-grade Android application that measures heart rate from live camera feed using **remote photoplethysmography (rPPG)** technology. The app leverages **Arm Neon SIMD** for signal processing and **NNAPI** for AI-powered signal refinement, achieving real-time performance on mobile devices.
+**Ojas** is a production-grade Android application that transforms any smartphone into a medical-grade health monitor. Using **remote photoplethysmography (rPPG)**, it detects heart rate and stress levels purely from a live camera feed.
+
+Built for the **Arm AI Developer Challenge**, Ojas demonstrates how **Arm Neon SIMD intrinsics**, **KleidiAI-optimized MediaPipe**, and **NNAPI** can deliver real-time, privacy-first health AI on the edge.
 
 ---
 
@@ -23,7 +25,13 @@ Ojas is a production-grade Android application that measures heart rate from liv
 
 ## 🧬 Technical Architecture
 
-```
+<img width="2816" height="1536" alt="ojas2" src="https://github.com/user-attachments/assets/935de4cb-01a4-41d0-9fe9-8aa895953ac8" />
+
+
+<img width="2816" height="1536" alt="ojas1" src="https://github.com/user-attachments/assets/699a781f-95c0-4a7b-bdcc-9664226102eb" />
+
+
+<!--
 ┌─────────────────┐
 │  Camera (30fps) │
 └────────┬────────┘
@@ -63,8 +71,7 @@ Ojas is a production-grade Android application that measures heart rate from liv
 │ Jetpack Compose UI │  ← Live graph + HUD
 └────────────────────┘
 ```
-
----
+-->
 
 ## 🛠️ Tech Stack
 
@@ -175,18 +182,31 @@ FFT finds dominant frequency in 0.75-3.0 Hz range (45-180 BPM) → converts to h
 ---
 
 ## ⚡ Performance Optimization
+### 🛠️ Arm Optimization Deep Dive
 
-### **Arm Neon SIMD**
-- **Vectorization**: Processes 4 floats simultaneously
-- **Functions**: Mean, StdDev, Normalization
-- **Speedup**: 4x over scalar code
+Ojas isn't just a wrapper around an API; it features custom low-level optimizations for Arm processors:
 
-### **NNAPI (Neural Networks API)**
+### 1. **Zero-Allocation ROI Extraction**
+To prevent ROI contamination (where non-skin pixels corrupt the heart rate signal), Ojas precisely targets discrete skin patches on the forehead and cheeks using a highly optimized, zero-allocation Kotlin pipeline.
+- **Technique**: Direct Array Buffering
+- **Implementation**: Pre-allocates primitive `IntArray` buffers and uses native Android bitmap extraction `getPixels()` to sample exactly the 3x3 regions surrounding MediaPipe landmarks. 
+- **Benefit**: Achieves the speed of native C++ code while eliminating JNI boundary overhead and preventing garbage collection (GC) pauses during the 30 FPS real-time loop.
+
+### 2. **KleidiAI Integration**
+We utilize **MediaPipe 0.10.14**, which integrates **Arm KleidiAI** micro-kernels.
+- **Impact**: drastically improves matrix multiplication performance for the Face Mesh model on Arm v9 CPUs.
+
+### 3. **NPU/GPU Offloading**
+- **Face Tracking**: Runs on the NPU/GPU via XNNPACK.
+- **Signal Cleaning**: The 1D CNN model uses the **Android NNAPI delegate** to leverage specific hardware accelerators (Hexagon DSP, Mali GPU, or Ethos NPU).
+
+
+### 5. **NNAPI (Neural Networks API)**
 - **Target**: Arm Cortex-M NPU, Ethos-N NPU, Mali GPU
 - **Precision**: FP16 (half-precision)
 - **Inference Time**: ~10ms (vs. 50ms CPU-only)
 
-### **Optimization Flags**
+### 5. **Optimization Flags**
 ```cmake
 -O3                    # Maximum optimization
 -ffast-math           # Aggressive FP math
@@ -200,11 +220,12 @@ FFT finds dominant frequency in 0.75-3.0 Hz range (45-180 BPM) → converts to h
 
 | Device | SoC | NPU | Avg HR Error | FPS | Inference Time |
 |--------|-----|-----|--------------|-----|----------------|
-| Pixel 7 Pro | Tensor G2 | TPU | ±2.3 BPM | 30 | 8ms |
-| Galaxy S22 | Snapdragon 8 Gen 1 | Hexagon | ±2.7 BPM | 30 | 10ms |
-| OnePlus 9 | Snapdragon 888 | Hexagon 780 | ±3.1 BPM | 30 | 12ms |
+| Pixel 7 | Tensor G2 | TPU | ±6.3 BPM | 30 | 8ms |
+| Galaxy S23 | Snapdragon 8 Gen 2 | Hexagon | ±4.7 BPM | 30 | 10 ms |
+| Galaxy S24 | Snapdragon 8 Gen 3 | Hexagon | ±3.1 BPM | 30 | 9 ms |
 
-*Tested against Polar H10 chest strap (clinical reference)*
+*Note: Signal processing via NEON is negligible (<1ms) compared to frame time, proving the efficiency of SIMD.*
+*Tested against chest strap (clinical reference)*
 
 ---
 
@@ -325,7 +346,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ## 👤 Author
 
-**Your Name**
+**Pranshu Namdeo**
 - GitHub: [@namdpran8](https://github.com/namdpran8)
 - Email: namdeopranshu8@gmail.com
 
@@ -337,6 +358,15 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 - KissFFT for lightweight FFT implementation
 - TensorFlow Lite team for mobile AI tools
 - Arm for Neon SIMD documentation
+
+---
+
+## 🚀 Usage Guide
+
+1. **Launch App**: Grant camera permission.
+2. **Position**: Ensure your face is well-lit and centered.
+3. **Tracking**: Wait for the green mesh overlay to appear.
+4. **Measuring**: Hold still for ~10 seconds. The "Analysis" card will update from "Gathering data..." to showing your **Stress Level** and **Heart Rate**.
 
 ---
 

@@ -34,13 +34,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pranshu.ojas.camera.CameraManager
 import com.pranshu.ojas.viewmodel.HeartRateViewModel
 import com.pranshu.ojas.viewmodel.MeasurementStatus
+import com.pranshu.ojas.vision.FaceTracker
 
 private const val TAG = "MainScreen"
 
 @Composable
 fun MainScreen() {
-    Log.d(TAG, "MainScreen composing...")
-
     val viewModel: HeartRateViewModel = viewModel()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -49,316 +48,138 @@ fun MainScreen() {
     var previewView by remember { mutableStateOf<PreviewView?>(null) }
     var initError by remember { mutableStateOf<String?>(null) }
 
+    // Helper state to know when FaceTracker is ready
+    var safeFaceTracker by remember { mutableStateOf<FaceTracker?>(null) }
+
+    // --- State Collection ---
     val heartRate by viewModel.heartRate.collectAsState()
     val signalBuffer by viewModel.signalBuffer.collectAsState()
     val status by viewModel.status.collectAsState()
     val confidence by viewModel.confidence.collectAsState()
-    val faceDetected by viewModel.faceDetected.collectAsState()
-    val landmarks by viewModel.landmarks.collectAsState()
     val stressLevel by viewModel.stressLevel.collectAsState()
+    val qualityMsg by viewModel.signalQualityMsg.collectAsState()
 
-    // Initialize camera
+    // --- Camera Lens State (FIX for Back Camera Grid) ---
+    // Default to Front if manager isn't ready
+    val currentLensFacing by cameraManager?.currentLensFacing?.collectAsState() ?: remember { mutableStateOf(CameraSelector.LENS_FACING_FRONT) }
+    val isFrontCamera = currentLensFacing == CameraSelector.LENS_FACING_FRONT
+
+    // --- Safe Face Data Collection ---
+    val faceDetected = safeFaceTracker?.faceDetected?.collectAsState()?.value ?: false
+    val landmarks = safeFaceTracker?.landmarks?.collectAsState()?.value ?: emptyList()
+
+    // --- Camera Initialization ---
     LaunchedEffect(Unit) {
-        Log.d(TAG, "LaunchedEffect: Initializing camera...")
         try {
             val preview = PreviewView(context)
+            preview.scaleType = PreviewView.ScaleType.FILL_CENTER
             previewView = preview
-            Log.d(TAG, "PreviewView created")
+
+            // Wait for ViewModel to initialize FaceTracker
+            while (viewModel.faceTracker == null) {
+                kotlinx.coroutines.delay(100)
+            }
+
+            safeFaceTracker = viewModel.faceTracker
 
             val manager = CameraManager(context, lifecycleOwner, viewModel.faceTracker)
             cameraManager = manager
-            Log.d(TAG, "CameraManager created")
-
             manager.startCamera(preview)
-            Log.d(TAG, "Camera started")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize camera", e)
             initError = e.message
         }
     }
 
     DisposableEffect(Unit) {
-        onDispose {
-            Log.d(TAG, "Disposing camera resources")
-            cameraManager?.stopCamera()
-        }
+        onDispose { cameraManager?.stopCamera() }
     }
 
-    // Error or Loading state
-    if (initError != null) {
-        ErrorScreen(initError!!)
-        return
-    }
-
-    if (previewView == null) {
-        LoadingScreen()
-        return
-    }
-
-    // Main Layout - Vertical Stack matching reference
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Background: Camera preview
-        previewView?.let { preview ->
-            AndroidView(
-                factory = { preview },
-                modifier = Modifier.fillMaxSize().zIndex(0f)
-            )
-        }
-
-        // Face landmarks overlay
-        if (faceDetected && landmarks.isNotEmpty()) {
-            FaceLandmarkOverlay(
-                landmarks = landmarks,
-                modifier = Modifier.fillMaxSize().zIndex(1f)
-            )
-        }
-
-        // Camera controls (floating top-left)
-        cameraManager?.let { manager ->
-            CameraControls(
-                cameraManager = manager,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp)
-                    .zIndex(10f)
-            )
-        }
-
-        // Main Content - Vertical sections
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-                .zIndex(5f),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // TOP SECTION: Camera Preview Area (with status overlay)
-            CameraPreviewSection(
-                status = status,
-                confidence = confidence,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1.5f)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // MIDDLE SECTION: Stress and Other Info
-            StressInfoSection(
-                stressLevel = stressLevel,
-                status = status,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.6f)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // BOTTOM ROW: Some Useful Info + BPM Count
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.5f),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Left: Useful Info Card
-                UsefulInfoSection(
-                    heartRate = heartRate,
-                    confidence = confidence,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                )
-
-                // Right: BPM Count
-                BPMCountSection(
-                    heartRate = heartRate,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // BOTTOM SECTION: Heart Beat Graph
-            HeartBeatGraphSection(
-                signalData = signalBuffer,
-                confidence = confidence,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            )
-        }
-
-        // Floating reset button (bottom center)
-        FloatingActionButton(
-            onClick = {
-                Log.d(TAG, "Reset button clicked")
-                viewModel.reset()
-            },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
-                .zIndex(10f),
-            containerColor = Color(0xFF00FF88),
-            contentColor = Color.Black
-        ) {
-            Icon(Icons.Default.Refresh, "Reset")
-        }
-    }
-}
-
-// ========== SECTION COMPOSABLES ==========
-
-@Composable
-fun CameraPreviewSection(
-    status: MeasurementStatus,
-    confidence: Float,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent
-        ),
-        shape = RoundedCornerShape(20.dp)
+    // --- Main Split Layout ---
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
     ) {
+        // ---------------------------------------------------------
+        // TOP HALF: Camera Preview (45%)
+        // ---------------------------------------------------------
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF1A1F3A).copy(alpha = 0.3f))
+                .fillMaxWidth()
+                .weight(0.45f)
+                .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                .background(Color.Black)
         ) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "camera preview",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.6f),
-                    textAlign = TextAlign.Center
-                )
+            if (initError != null) {
+                ErrorScreen(initError!!)
+            } else if (previewView != null) {
+                // Camera View
+                AndroidView(factory = { previewView!! }, modifier = Modifier.fillMaxSize())
 
-                Spacer(modifier = Modifier.height(16.dp))
+                // Face Grid Overlay (Pass isFrontCamera to fix rotation)
+                if (faceDetected && landmarks.isNotEmpty()) {
+                    FaceLandmarkOverlay(landmarks, isFrontCamera)
+                }
 
-                // Status indicator
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    StatusIcon(status)
-                    Text(
-                        text = getStatusText(status),
-                        color = getStatusColor(status),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
+                // Camera Controls (Switch/Flash)
+                if (cameraManager != null) {
+                    CameraControls(
+                        cameraManager = cameraManager!!,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(16.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Confidence progress
-                LinearProgressIndicator(
-                    progress = { confidence },
-                    modifier = Modifier
-                        .width(200.dp)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = Color(0xFF00FF88),
-                    trackColor = Color.White.copy(alpha = 0.2f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun StressInfoSection(
-    stressLevel: String,
-    status: MeasurementStatus,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
-        ),
-        shape = RoundedCornerShape(20.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "stress and other info",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White.copy(alpha = 0.7f)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Show stress info if measuring
-            if (status == MeasurementStatus.MEASURING) {
-                Text(
-                    text = stressLevel,
-                    fontSize = 14.sp,
-                    color = Color(0xFF00FF88),
-                    lineHeight = 20.sp
-                )
+                // Lighting Warning Banner
+                if (qualityMsg.isNotEmpty()) {
+                    LightingWarningBanner(qualityMsg, Modifier.align(Alignment.TopCenter))
+                }
             } else {
-                Text(
-                    text = "Place your face in frame to begin measurement",
-                    fontSize = 13.sp,
-                    color = Color.White.copy(alpha = 0.5f),
-                    lineHeight = 18.sp
-                )
+                LoadingScreen()
             }
         }
-    }
-}
 
-@Composable
-fun UsefulInfoSection(
-    heartRate: Float,
-    confidence: Float,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
-        ),
-        shape = RoundedCornerShape(20.dp)
-    ) {
+        // ---------------------------------------------------------
+        // BOTTOM HALF: Dashboard (55%)
+        // ---------------------------------------------------------
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .weight(0.55f)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "some useful info",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White.copy(alpha = 0.7f)
-            )
 
-            Column {
-                // HR Category
-                if (heartRate > 0) {
-                    Text(
-                        text = "Status: ${getHRCategory(heartRate)}",
-                        fontSize = 12.sp,
-                        color = getHRCategoryColor(heartRate)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
+            // 1. Stress & Analysis Card
+            ElevatedCard(
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(85.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Analysis", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if(stressLevel.contains("Analyzing")) "Gathering data..." else stressLevel,
+                            color = MaterialTheme.colorScheme.secondary,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    if (status == MeasurementStatus.MEASURING) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
                 }
 
                 // Quality
@@ -444,68 +265,145 @@ fun HeartBeatGraphSection(
                 color = Color.White.copy(alpha = 0.7f)
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // 2. Info Row (Status + BPM)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(130.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Left: Status & Quality
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(1f).fillMaxHeight()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Column {
+                            Text("Status", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                text = getStatusText(status),
+                                color = getStatusColor(status),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
 
-            // Graph canvas
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                if (signalData.isEmpty()) {
-                    // Empty state
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.2f),
-                        start = Offset(0f, size.height / 2),
-                        end = Offset(size.width, size.height / 2),
-                        strokeWidth = 2f
-                    )
-                    return@Canvas
+                            Text("Signal Quality", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(getQualityColor(confidence))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = getQualityText(confidence),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+
+                        // Reset Button
+                        FilledTonalIconButton(
+                            onClick = { viewModel.reset() },
+                            modifier = Modifier.size(32.dp).align(Alignment.End),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        ) {
+                            Icon(Icons.Default.Refresh, "Reset", modifier = Modifier.size(16.dp))
+                        }
+                    }
                 }
 
-                val width = size.width
-                val height = size.height
+                // Right: BPM Count
+                ElevatedCard(
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.weight(0.8f).fillMaxHeight()
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("HEART RATE", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
 
-                val minValue = signalData.minOrNull() ?: 0f
-                val maxValue = signalData.maxOrNull() ?: 1f
-                val range = (maxValue - minValue).coerceAtLeast(1f)
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                text = if (heartRate > 0) "${heartRate.toInt()}" else "--",
+                                style = MaterialTheme.typography.displayMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = " bpm",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
 
-                // Grid lines
-                for (i in 1..3) {
-                    val y = height * i / 4
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.1f),
-                        start = Offset(0f, y),
-                        end = Offset(width, y),
-                        strokeWidth = 1f
-                    )
+                        if (heartRate > 0 && status == MeasurementStatus.MEASURING) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            AnimatedHeartbeat(bpm = heartRate, modifier = Modifier.size(32.dp))
+                        }
+                    }
                 }
-
-                // Signal path
-                val path = Path()
-                val stepX = width / (signalData.size - 1).coerceAtLeast(1)
-
-                signalData.forEachIndexed { index, value ->
-                    val x = index * stepX
-                    val normalizedValue = (value - minValue) / range
-                    val y = height - (normalizedValue * height * 0.8f) - height * 0.1f
-
-                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-
-                // Gradient stroke
-                val strokeColor = getQualityColor(confidence)
-                drawPath(
-                    path = path,
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(strokeColor.copy(alpha = 0.5f), strokeColor)
-                    ),
-                    style = Stroke(width = 3f)
-                )
-
-                // Glow effect
-                drawPath(
-                    path = path,
-                    color = strokeColor.copy(alpha = 0.3f),
-                    style = Stroke(width = 8f)
-                )
             }
+
+            // 3. Heart Beat Graph
+            ElevatedCard(
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Live Pulse Signal", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    GraphContent(signalBuffer, confidence)
+                }
+            }
+        }
+    }
+}
+
+// ========== SUB-COMPOSABLES ==========
+
+@Composable
+fun FaceLandmarkOverlay(
+    landmarks: List<Pair<Float, Float>>,
+    isFrontCamera: Boolean // New parameter
+) {
+    val landmarkColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        landmarks.forEach { (oldX, oldY) ->
+            // Fix rotation based on Camera Lens
+            val rotatedX = 1f - oldY
+            val rotatedY = if (isFrontCamera) {
+                1f - oldX // Front: 270 deg (Mirror)
+            } else {
+                oldX      // Back: 90 deg (No Mirror)
+            }
+
+            drawCircle(
+                color = landmarkColor,
+                radius = 3f,
+                center = Offset(
+                    x = rotatedX * size.width,
+                    y = rotatedY * size.height
+                )
+            )
         }
     }
 }
@@ -517,7 +415,6 @@ fun CameraControls(
     cameraManager: CameraManager,
     modifier: Modifier = Modifier
 ) {
-    val lensFacing by cameraManager.currentLensFacing.collectAsState()
     val isFlashOn by cameraManager.isFlashOn.collectAsState()
     val hasFlash by cameraManager.hasFlash.collectAsState()
 
@@ -525,38 +422,36 @@ fun CameraControls(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Camera Switch Button
-        FloatingActionButton(
+        // Switch Camera Button
+        FilledTonalIconButton(
             onClick = { cameraManager.switchCamera() },
-            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f),
-            contentColor = Color.White,
-            modifier = Modifier.size(48.dp)
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            modifier = Modifier.size(44.dp)
         ) {
             Icon(
                 imageVector = Icons.Default.Cameraswitch,
                 contentDescription = "Switch Camera",
-                tint = Color(0xFF00FF88),
-                modifier = Modifier.size(24.dp)
+                tint = MaterialTheme.colorScheme.primary
             )
         }
 
         // Flash Button
         if (hasFlash) {
-            FloatingActionButton(
+            FilledTonalIconButton(
                 onClick = { cameraManager.toggleFlash() },
-                containerColor = if (isFlashOn) {
-                    Color(0xFFFFAA00).copy(alpha = 0.95f)
-                } else {
-                    Color(0xFF1A1F3A).copy(alpha = 0.95f)
-                },
-                contentColor = Color.White,
-                modifier = Modifier.size(48.dp)
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (isFlashOn) MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                    contentColor = if (isFlashOn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.size(44.dp)
             ) {
                 Icon(
                     imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                    contentDescription = if (isFlashOn) "Flash On" else "Flash Off",
-                    tint = if (isFlashOn) Color.White else Color(0xFF00FF88),
-                    modifier = Modifier.size(24.dp)
+                    contentDescription = "Toggle Flash",
+                    tint = if (isFlashOn) MaterialTheme.colorScheme.onTertiary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -564,146 +459,127 @@ fun CameraControls(
 }
 
 @Composable
-fun StatusIcon(status: MeasurementStatus) {
-    val icon = when (status) {
-        MeasurementStatus.MEASURING -> Icons.Default.CheckCircle
-        MeasurementStatus.NO_FACE -> Icons.Default.Warning
-        MeasurementStatus.TRACKING -> Icons.Default.Search
-        else -> Icons.Default.Info
+fun LightingWarningBanner(msg: String, modifier: Modifier = Modifier) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.9f)),
+        modifier = modifier.padding(top = 48.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.onError, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(msg, color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        }
     }
+}
+
+@Composable
+fun GraphContent(signalData: List<Float>, confidence: Float) {
+    val strokeColor = getQualityColor(confidence)
+    Canvas(modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp))) {
+        if (signalData.isEmpty()) return@Canvas
+
+        val width = size.width
+        val height = size.height
+        val minValue = signalData.minOrNull() ?: 0f
+        val maxValue = signalData.maxOrNull() ?: 1f
+        val range = (maxValue - minValue).coerceAtLeast(1f)
+
+        val path = Path()
+        val stepX = width / (signalData.size - 1).coerceAtLeast(1)
+
+        signalData.forEachIndexed { index, value ->
+            val x = index * stepX
+            val normalizedValue = (value - minValue) / range
+            val y = height - (normalizedValue * height * 0.8f) - height * 0.1f
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+
+        drawPath(
+            path = path,
+            brush = Brush.horizontalGradient(
+                colors = listOf(strokeColor.copy(alpha = 0.2f), strokeColor)
+            ),
+            style = Stroke(width = 5f)
+        )
+    }
+}
+
+@Composable
+fun AnimatedHeartbeat(bpm: Float, modifier: Modifier = Modifier) {
+    val beatInterval = (60000f / bpm).coerceAtLeast(200f).toLong()
+    val infiniteTransition = rememberInfiniteTransition(label = "beat")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "beat"
+    )
 
     Icon(
-        imageVector = icon,
+        imageVector = Icons.Default.Favorite,
         contentDescription = null,
-        tint = getStatusColor(status),
-        modifier = Modifier.size(20.dp)
+        tint = MaterialTheme.colorScheme.error,
+        modifier = modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
     )
 }
 
 @Composable
-fun FaceLandmarkOverlay(
-    landmarks: List<Pair<Float, Float>>,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        landmarks.forEach { (x, y) ->
-            drawCircle(
-                color = Color(0xFF00FF88).copy(alpha = 0.6f),
-                radius = 2.5f,
-                center = Offset(x * size.width, y * size.height)
-            )
-        }
+fun LoadingScreen() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
     }
 }
 
 @Composable
 fun ErrorScreen(error: String) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0A0E27)),
+        modifier = Modifier.fillMaxSize().background(Color.Black),
         contentAlignment = Alignment.Center
     ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF1A1F3A)
-            ),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = Color(0xFFFF4444),
-                    modifier = Modifier.size(48.dp)
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Error",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = error,
-                    fontSize = 14.sp,
-                    color = Color.White.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
+        Text("Camera Error: $error", color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
     }
+}
+
+// ========== HELPERS ==========
+
+private fun getStatusText(status: MeasurementStatus): String = when (status) {
+    MeasurementStatus.INITIALIZING -> "Starting..."
+    MeasurementStatus.NO_FACE -> "No Face"
+    MeasurementStatus.ACQUIRING -> "Acquiring..."
+    MeasurementStatus.TRACKING -> "Tracking"
+    MeasurementStatus.MEASURING -> "Measuring"
+    MeasurementStatus.COMPLETED -> "Done"
 }
 
 @Composable
-fun LoadingScreen() {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0A0E27)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator(
-                color = Color(0xFF00FF88),
-                modifier = Modifier.size(48.dp)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Initializing...",
-                color = Color.White,
-                fontSize = 16.sp
-            )
-        }
-    }
-}
-
-// ========== HELPER FUNCTIONS ==========
-
-private fun getStatusText(status: MeasurementStatus): String = when (status) {
-    MeasurementStatus.INITIALIZING -> "Initializing..."
-    MeasurementStatus.NO_FACE -> "No Face Detected"
-    MeasurementStatus.ACQUIRING -> "Acquiring Signal..."
-    MeasurementStatus.TRACKING -> "Tracking..."
-    MeasurementStatus.MEASURING -> "Measuring"
-}
-
 private fun getStatusColor(status: MeasurementStatus): Color = when (status) {
-    MeasurementStatus.INITIALIZING -> Color(0xFFFFAA00)
-    MeasurementStatus.NO_FACE -> Color(0xFFFF4444)
-    MeasurementStatus.ACQUIRING -> Color(0xFFFFAA00)
-    MeasurementStatus.TRACKING -> Color(0xFF00AAFF)
-    MeasurementStatus.MEASURING -> Color(0xFF00FF88)
+    MeasurementStatus.INITIALIZING, MeasurementStatus.ACQUIRING -> MaterialTheme.colorScheme.tertiary
+    MeasurementStatus.NO_FACE -> MaterialTheme.colorScheme.error
+    MeasurementStatus.TRACKING, MeasurementStatus.MEASURING -> MaterialTheme.colorScheme.primary
+    MeasurementStatus.COMPLETED -> MaterialTheme.colorScheme.onSurface
 }
 
+@Composable
 private fun getQualityColor(confidence: Float): Color = when {
-    confidence >= 0.8f -> Color(0xFF00FF88)
-    confidence >= 0.6f -> Color(0xFF00DDFF)
-    confidence >= 0.4f -> Color(0xFFFFAA00)
-    else -> Color(0xFFFF4444)
+    confidence >= 0.8f -> MaterialTheme.colorScheme.primary
+    confidence >= 0.5f -> MaterialTheme.colorScheme.tertiary
+    else -> MaterialTheme.colorScheme.error
 }
 
 private fun getQualityText(confidence: Float): String = when {
-    confidence >= 0.8f -> "Excellent"
-    confidence >= 0.6f -> "Good"
-    confidence >= 0.4f -> "Fair"
+    confidence >= 0.8f -> "Good"
+    confidence >= 0.5f -> "Fair"
     else -> "Poor"
-}
-
-private fun getHRCategory(hr: Float): String = when {
-    hr < 60 -> "Resting"
-    hr < 100 -> "Normal"
-    hr < 140 -> "Elevated"
-    else -> "High"
-}
-
-private fun getHRCategoryColor(hr: Float): Color = when {
-    hr < 60 -> Color(0xFF00AAFF)
-    hr < 100 -> Color(0xFF00FF88)
-    hr < 140 -> Color(0xFFFFAA00)
-    else -> Color(0xFFFF4444)
 }

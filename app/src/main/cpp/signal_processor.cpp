@@ -13,7 +13,7 @@ SignalProcessor::SignalProcessor(int bufferSize, float samplingRate)
     mRawBuffer.reserve(bufferSize);
     mTimeBuffer.reserve(bufferSize);
 
-    // Initialize FFT (nfft should ideally be power of 2, but kiss_fft handles others)
+    // Initialize KissFFT
     mFftCfg = kiss_fft_alloc(bufferSize, 0, nullptr, nullptr);
     mFftIn.resize(bufferSize);
     mFftOut.resize(bufferSize);
@@ -25,7 +25,6 @@ SignalProcessor::~SignalProcessor() {
 
 void SignalProcessor::addSample(float greenValue, long timestamp) {
     if (mRawBuffer.size() >= mBufferSize) {
-        // Slide window: remove oldest
         mRawBuffer.erase(mRawBuffer.begin());
         mTimeBuffer.erase(mTimeBuffer.begin());
     }
@@ -36,6 +35,7 @@ void SignalProcessor::addSample(float greenValue, long timestamp) {
 void SignalProcessor::reset() {
     mRawBuffer.clear();
     mTimeBuffer.clear();
+    mPrevHR = 0.0f;
 }
 
 const std::vector<float>& SignalProcessor::getBuffer() const {
@@ -46,22 +46,18 @@ int SignalProcessor::getSampleCount() const {
     return mRawBuffer.size();
 }
 
-// Helper: Remove DC component and normalize
 void SignalProcessor::normalizeBuffer(const std::vector<float>& input, std::vector<float>& output) {
     output = input;
     if (input.empty()) return;
 
-    // Calculate mean
     float sum = std::accumulate(input.begin(), input.end(), 0.0f);
     float mean = sum / input.size();
 
-    // Subtract mean (detrending DC)
     for (float &val : output) {
         val -= mean;
     }
 }
 
-// Helper: Apply Hamming window to reduce spectral leakage
 void SignalProcessor::applyWindow(std::vector<float>& data) {
     size_t N = data.size();
     for (size_t i = 0; i < N; ++i) {
@@ -73,7 +69,6 @@ void SignalProcessor::applyWindow(std::vector<float>& data) {
 
 float SignalProcessor::computeHeartRate() {
     int N = mRawBuffer.size();
-    // Need a reasonable amount of data (e.g., ~3-4 seconds)
     if (N < mSamplingRate * 3) {
         return 0.0f;
     }
@@ -88,28 +83,44 @@ float SignalProcessor::computeHeartRate() {
         mFftIn[i].r = processed[i];
         mFftIn[i].i = 0.0f;
     }
-    // Zero pad if we haven't filled the buffer yet, though normally we wait
     for (int i = N; i < mBufferSize; ++i) {
         mFftIn[i].r = 0.0f;
         mFftIn[i].i = 0.0f;
     }
 
-    // 3. Execute FFT
+    // 3. Execute FFT (Using KissFFT)
     kiss_fft(mFftCfg, mFftIn.data(), mFftOut.data());
 
-    // 4. Find Peak Frequency in HR range
-    // Interest range: 45 BPM (0.75 Hz) to 240 BPM (4.0 Hz)
+    // 4. Define Search Range (45 - 200 BPM)
     float minFreq = 0.75f;
-    float maxFreq = 4.0f;
+    float maxFreq = 3.33f;
 
+    // Smart Search: Narrow window if we have a previous lock
+    if (mPrevHR > 0.0f) {
+        float prevFreq = mPrevHR / 60.0f;
+        float window = 15.0f / 60.0f; // +/- 15 BPM
+        minFreq = std::max(0.75f, prevFreq - window);
+        maxFreq = std::min(3.33f, prevFreq + window);
+    }
+
+    // 5. Find Peak
     float maxMagnitude = 0.0f;
     int peakIndex = -1;
+    float sumMagnitude = 0.0f;
+    int countMagnitude = 0;
 
     for (int i = 1; i < mBufferSize / 2; ++i) {
         float freq = (i * mSamplingRate) / mBufferSize;
+        float magnitude = sqrtf(mFftOut[i].r * mFftOut[i].r + mFftOut[i].i * mFftOut[i].i);
 
+        // Calculate average noise in valid range
+        if (freq >= 0.75f && freq <= 3.33f) {
+            sumMagnitude += magnitude;
+            countMagnitude++;
+        }
+
+        // Peak Tracking
         if (freq >= minFreq && freq <= maxFreq) {
-            float magnitude = sqrtf(mFftOut[i].r * mFftOut[i].r + mFftOut[i].i * mFftOut[i].i);
             if (magnitude > maxMagnitude) {
                 maxMagnitude = magnitude;
                 peakIndex = i;
@@ -117,12 +128,28 @@ float SignalProcessor::computeHeartRate() {
         }
     }
 
-    // 5. Convert peak index to BPM
-    if (peakIndex != -1) {
-        float freq = (peakIndex * mSamplingRate) / mBufferSize;
-        float bpm = freq * 60.0f;
-        return bpm;
+    // 6. Validate Signal Quality (SNR)
+    if (countMagnitude > 0) {
+        float avgMagnitude = sumMagnitude / countMagnitude;
+        // Peak must be at least 2x the average noise
+        if (maxMagnitude < avgMagnitude * 2.0f) {
+            return mPrevHR > 0 ? mPrevHR : 0.0f;
+        }
     }
 
-    return 0.0f;
+    // 7. Convert to BPM
+    if (peakIndex != -1) {
+        float freq = (peakIndex * mSamplingRate) / mBufferSize;
+        float currentBpm = freq * 60.0f;
+
+        // Smooth update (Exponential Moving Average)
+        if (mPrevHR > 0.0f) {
+            mPrevHR = (mPrevHR * 0.7f) + (currentBpm * 0.3f);
+        } else {
+            mPrevHR = currentBpm;
+        }
+        return mPrevHR;
+    }
+
+    return mPrevHR;
 }
