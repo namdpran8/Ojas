@@ -1,5 +1,6 @@
 package com.pranshu.ojas.ui
 
+import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.core.*
@@ -28,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pranshu.ojas.camera.CameraManager
 import com.pranshu.ojas.viewmodel.HeartRateViewModel
@@ -179,7 +181,89 @@ fun MainScreen() {
                         )
                     }
                 }
+
+                // Quality
+                Text(
+                    text = "Quality: ${getQualityText(confidence)}",
+                    fontSize = 12.sp,
+                    color = getQualityColor(confidence)
+                )
             }
+        }
+    }
+}
+
+@Composable
+fun BPMCountSection(
+    heartRate: Float,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "bpm count",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+
+            // Large BPM number
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = if (heartRate > 0) "${heartRate.toInt()}" else "--",
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF00FF88)
+                )
+                Text(
+                    text = "BPM",
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun HeartBeatGraphSection(
+    signalData: List<Float>,
+    confidence: Float,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1A1F3A).copy(alpha = 0.95f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = "heart beat graph",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White.copy(alpha = 0.7f)
+            )
 
             // 2. Info Row (Status + BPM)
             Row(
@@ -323,6 +407,8 @@ fun FaceLandmarkOverlay(
         }
     }
 }
+
+// ========== HELPER COMPOSABLES ==========
 
 @Composable
 fun CameraControls(
